@@ -18,7 +18,7 @@ conda env config vars set HF_TOKEN=<enter token here>
 Follow the instructions on the official [`meta-llama`](https://huggingface.co/meta-llama) repository to ensure you have access to the official Llama model weights. Once you have confirmed access, you can run the following command to download the weights to your local machine. This will also download the tokenizer model and a responsible use guide.
 
 
-torchtune supports the following models.
+torchtune supports the following models:
 
 | Model                                         | Sizes     |
 |-----------------------------------------------|-----------|
