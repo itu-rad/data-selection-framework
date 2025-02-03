@@ -1,0 +1,17 @@
+name: selection
+dependencies:
+  - python=3.12
+  - pip
+  - boto3
+  - pip:
+      - mlflow
+      - psutil
+      - radt
+      - torch
+      - torchvision
+      - torchaudio
+      - torchtext
+      - torchao
+      - torchtune
+      - bitsandbytes
+      - lm_eval==0.4.*
