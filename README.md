@@ -65,7 +65,7 @@ tune run recipe/lora_finetune.py --config config/llama3_2/1b_lora/train.yaml
 Training configs should be accompanied with evaluation configs. To evaluate the models trained above:
 
 ```bash
-    tune run recipe/eval.py --config config/llama3_2/1b_full/eval_base.yaml
+tune run recipe/eval.py --config config/llama3_2/1b_full/eval_base.yaml
 tune run recipe/eval.py --config config/llama3_2/1b_full/eval_finetuned.yaml
 ```
 
@@ -77,6 +77,6 @@ tune run recipe/eval.py --config config/llama3_2/1b_lora/eval_finetuned.yaml
 ```
 
 A full list of evaluation tasks can be found here: [https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/README.md](https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/README.md)
-
+Additionally, a full list of datasets to train on can be found here: [https://pytorch.org/torchtune/0.2/api_ref_datasets.html#datasets](https://pytorch.org/torchtune/0.2/api_ref_datasets.html#datasets).
 
 Further torchtune examples: [https://github.com/pytorch/torchtune/blob/main/docs/source/tutorials/llama3.rst](https://github.com/pytorch/torchtune/blob/main/docs/source/tutorials/llama3.rst)
