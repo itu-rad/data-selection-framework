@@ -89,3 +89,27 @@ A full list of evaluation tasks can be found here: [https://github.com/EleutherA
 Additionally, a full list of datasets to train on can be found here: [https://pytorch.org/torchtune/0.2/api_ref_datasets.html#datasets](https://pytorch.org/torchtune/0.2/api_ref_datasets.html#datasets).
 
 Further torchtune examples: [https://github.com/pytorch/torchtune/blob/main/docs/source/tutorials/llama3.rst](https://github.com/pytorch/torchtune/blob/main/docs/source/tutorials/llama3.rst)
+
+
+
+### Infering Models 
+
+Begin by createing a custom generation config, either by running the following 
+or creating your own: 
+
+``` bash
+tune cp generation ./custom_generation_config.yaml 
+
+``` 
+
+
+To infer the model by changeing the associated "user" field value and running:
+```bash 
+tune run generate --config ./custom_generation_config.yam
+```
+
+
+To infer the model using torch tune cli run the following:
+```bash 
+tune run generate --config ./custom_generation_config.yaml prompt.user=<Your Prompt Here> 
+```
