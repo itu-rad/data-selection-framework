@@ -7,12 +7,13 @@ We evaluate data selection methods on a range of tuning tasks.
 ## Getting Started
 
 ```bash
-# Create the 'selection' conda environment
-conda env create -n conda.yaml
+# Previouis command : conda env create -n conda.yaml, does not work. 
+conda env create -f conda.yaml
 conda activate selection
 
-# Now set the HF_TOKEN environment variable in your conda environment
-conda env config vars set HF_TOKEN=<enter token here>
+# If you want to install additional dependencies add dependencies in conda.yaml and run:
+conda env update --file conda.yaml --prune
+
 ```
 
 Follow the instructions on the official [`meta-llama`](https://huggingface.co/meta-llama) repository to ensure you have access to the official Llama model weights. Once you have confirmed access, you can run the following command to download the weights to your local machine. This will also download the tokenizer model and a responsible use guide.
