@@ -8,7 +8,6 @@ We evaluate data selection methods on a range of tuning tasks.
 
 ```bash
 # Create the 'selection' conda environment
-# Previouis command : conda env create -n conda.yaml, does not work. 
 conda env create -f conda.yaml
 conda activate selection
 
