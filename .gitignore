@@ -171,6 +171,4 @@ cython_debug/
 .pypirc
 
 # Ignored folders
-/downloaded_models/
-/finetuned_models/
-/generate/
+/model_cache/

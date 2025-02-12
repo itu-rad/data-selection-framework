@@ -47,7 +47,7 @@ torchtune supports the following models:
 We recommend getting started with the small [Llama3.2](https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_2) models.
 
 ```bash
-tune download meta-llama/Llama-3.2-1B-Instruct --ignore-patterns "original/consolidated.00.pth" --output-dir ./downloaded_models
+tune download meta-llama/Llama-3.2-1B-Instruct --ignore-patterns "original/consolidated.00.pth" --output-dir ./model_cache/downloaded_models
 ```
 
 &nbsp;
