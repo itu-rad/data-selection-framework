@@ -30,7 +30,7 @@ dtype: bf16
 seed: 1234 # It is not recommended to change this seed, b/c it matches EleutherAI's default seed
 
 # EleutherAI specific eval args
-tasks: ["bbh_fewshot"]
+tasks: ["truthfulqa_mc2"]
 limit: null
 max_seq_length: 4096
 batch_size: 8
