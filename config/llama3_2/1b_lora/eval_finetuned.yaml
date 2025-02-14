@@ -11,7 +11,7 @@ model:
 
 checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
-  checkpoint_dir: /finetuned_models/torchtune/llama3_2_1B/lora_single_device/epoch_0/
+  checkpoint_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/lora_single_device/epoch_0/
   checkpoint_files: [
     ft-model-00001-of-00001.safetensors,
   ]
@@ -21,7 +21,7 @@ checkpointer:
 # Tokenizer
 tokenizer:
   _component_: torchtune.models.llama3.llama3_tokenizer
-  path:  /downloaded_models/Llama-3.2-1B-Instruct/original/tokenizer.model
+  path:  model_cache/downloaded_models/Llama-3.2-1B-Instruct/original/tokenizer.model
   max_seq_len: null
 
 # Environment
@@ -30,7 +30,7 @@ dtype: bf16
 seed: 1234 # It is not recommended to change this seed, b/c it matches EleutherAI's default seed
 
 # EleutherAI specific eval args
-tasks: ["truthfulqa_mc2"]
+tasks: ["bbh_fewshot"]
 limit: null
 max_seq_length: 4096
 batch_size: 8
