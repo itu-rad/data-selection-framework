@@ -46,21 +46,34 @@ torchtune supports the following models:
 
 We recommend getting started with the small [Llama3.2](https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_2) models.
 
-### To download the configs for your desired model  
+### Downloading the model  
+
 ```bash
-tune cp llama3_1/8B_full_single_device ./config/llama3_1/
-
-
-
-```
-
-### Insert huggingface model company and model name from huggingface model page. 
-```bash
-
+# Insert huggingface model company and model name from huggingface model page.
 model_company="meta-llama"
 model_name="Llama-3.2-1B-Instruct" 
 
 tune download $model_company/$model_name --ignore-patterns "original/consolidated.00.pth" --output-dir ./model_cache/downloaded_models/$model_name
+```
+
+
+### Creating recipes and configs
+
+```bash
+# To list all available torchtune recipes & configs
+tune ls
+
+
+# Creating a recipe at the path
+recipe="full_finetune_single_device"
+recipe_path="./recipe/full_finetune"
+tune cp $recipe $recipe_path --make-parents
+
+
+# Creating a config at the path
+model_config="llama3_2/1B_full_single_device"
+config_path="./config/llama3_2/1b_full/train.yaml"
+tune cp $model_config $config_path --make-parents
 ```
 
 &nbsp;
