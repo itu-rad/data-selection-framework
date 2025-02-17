@@ -46,6 +46,8 @@ torchtune supports the following models:
 
 We recommend getting started with the small [Llama3.2](https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_2) models.
 
+&nbsp;
+
 ### Downloading the model  
 
 ```bash
@@ -56,21 +58,30 @@ model_name="Llama-3.2-1B-Instruct"
 tune download $model_company/$model_name --ignore-patterns "original/consolidated.00.pth" --output-dir ./model_cache/downloaded_models/$model_name
 ```
 
+&nbsp;
 
 ### Creating recipes and configs
 
+To list all available torchtune recipes & configs
+
 ```bash
-# To list all available torchtune recipes & configs
 tune ls
+```
 
+## Creating a recipe at the path
+```bash
 
-# Creating a recipe at the path
 recipe="full_finetune_single_device"
 recipe_path="./recipe/full_finetune"
 tune cp $recipe $recipe_path --make-parents
+```
 
+## Creating a config at the path. 
+By default configs will utilize linux 'tmp' folder. This will result in downloaded and finetuned models being deleted after each session. 
 
-# Creating a config at the path
+```bash 
+# The current local model_cache pathsystem needs to be integrated as part of the config download pipeline. 
+# TO BE IMPLEMENTED
 model_config="llama3_2/1B_full_single_device"
 config_path="./config/llama3_2/1b_full/train.yaml"
 tune cp $model_config $config_path --make-parents
@@ -110,16 +121,20 @@ tune run recipe/eval.py --config config/llama3_2/1b_lora/eval_base.yaml
 tune run recipe/eval.py --config config/llama3_2/1b_lora/eval_finetuned.yaml
 ```
 
+&nbsp;
+
+## Evaluation tasks
 A full list of evaluation tasks can be found here: [https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/README.md](https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/README.md)
 Additionally, a full list of datasets to train on can be found here: [https://pytorch.org/torchtune/0.2/api_ref_datasets.html#datasets](https://pytorch.org/torchtune/0.2/api_ref_datasets.html#datasets).
 
 Further torchtune examples: [https://github.com/pytorch/torchtune/blob/main/docs/source/tutorials/llama3.rst](https://github.com/pytorch/torchtune/blob/main/docs/source/tutorials/llama3.rst)
 
 
+&nbsp;
 
 ### Infering Models 
 
-Begin by createing a custom generation config, either by running the following 
+Begin by createing a custom generation config, either by running the following commands 
 or creating your own: 
 
 ``` bash
@@ -128,13 +143,13 @@ tune cp generation ./custom_generation_config.yaml
 ``` 
 
 
-To infer the model by changeing the associated "user" field value and running:
+Infering the model by: changeing the "user" field value within the config and running the following command:
 ```bash 
 tune run generate --config ./custom_generation_config.yam
 ```
 
 
-To infer the model using torch tune cli run the following:
+Infering the model by: using torch tune cli run the following command:
 ```bash 
 tune run generate --config ./custom_generation_config.yaml prompt.user=<Your Prompt Here> 
 ```
