@@ -27,6 +27,7 @@ from torchtune.training.lr_schedulers import get_lr
 
 from tqdm import tqdm
 
+from selection.selectivesampler import SelectiveSampler
 
 log = utils.get_logger("DEBUG")
 
@@ -546,11 +547,11 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         shuffle: bool,
         batch_size: int,
         collate_fn: str,
-    ) -> Tuple[DistributedSampler, DataLoader]:
+    ) -> Tuple[SelectiveSampler, DataLoader]:
         """
-        All data related setup happens here. Currently this recipe only supports the
-        DistributedSamplers with Map-style Datasets which fit into memory. Other samplers,
-        iterable datasets and streaming datasets are not supported.
+        All data related setup happens here. Currently this recipe supports
+        SelectiveSampler with Map-style Datasets which fit into memory.
+        Other samplers, iterable datasets and streaming datasets are not supported.
         """
         if isinstance(cfg_dataset, ListConfig):
             datasets = [
@@ -568,7 +569,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(collate_fn)
 
-        sampler = DistributedSampler(
+        sampler = SelectiveSampler(
             ds,
             num_replicas=1,
             rank=0,
@@ -592,7 +593,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             ),
         )
 
-        log.info("Dataset and Sampler are initialized.")
+        log.info("Dataset and SelectiveSampler are initialized.")
 
         return sampler, dataloader
 
