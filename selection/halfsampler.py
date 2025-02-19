@@ -10,6 +10,7 @@ class HalfSampler(SelectiveSampler):
     """
 
     def set_num_selected_samples(self):
+        """Set expected number of selected samples for dataset len"""
         self._num_selected_samples = self.num_samples // 2
 
     def pre_epoch(self) -> None:

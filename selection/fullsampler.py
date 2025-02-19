@@ -2,18 +2,14 @@ from selection.selectivesampler import SelectiveSampler
 
 
 class FullSampler(SelectiveSampler):
-    """Example implementation of SelectiveSampler that only uses the first half of samples.
-
-    This sampler demonstrates basic usage of SelectiveSampler by:
-    1. Setting mask in pre_epoch to select first half of dataset
-    2. Implementing required hook methods with simple pass-through behavior
-    """
+    """Example implementation of SelectiveSampler that uses all of the samples."""
 
     def set_num_selected_samples(self):
+        """Set expected number of selected samples for dataset len"""
         self._num_selected_samples = self.num_samples
 
     def pre_epoch(self) -> None:
-        """Set mask to select first half of samples before each epoch starts"""
+        """Set mask to select all samples before each epoch starts"""
         n = len(self.dataset)
         mask = [True] * n
         self.set_mask(mask)
