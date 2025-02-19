@@ -27,7 +27,7 @@ from torchtune.training.lr_schedulers import get_lr
 
 from tqdm import tqdm
 
-from selection.selectivesampler import SelectiveSampler
+from selection import SelectiveSampler, HalfSampler, FullSampler
 
 log = utils.get_logger("DEBUG")
 
@@ -569,7 +569,8 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(collate_fn)
 
-        sampler = SelectiveSampler(
+        # TODO: make commandline arg
+        sampler = HalfSampler(
             ds,
             num_replicas=1,
             rank=0,
@@ -673,6 +674,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             self._sampler.set_epoch(curr_epoch)
 
             pbar = tqdm(total=self._steps_per_epoch)
+            self._sampler.pre_epoch()
             for idx, batch in enumerate(self._dataloader):
                 if (
                     self.max_steps_per_epoch is not None
@@ -680,6 +682,8 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                     == self.max_steps_per_epoch
                 ):
                     break
+
+                self._sampler.on_batch(idx, batch)
 
                 # Start tracking CUDA memory for active steps for just the first epoch
                 if (
@@ -701,6 +705,9 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 # Loss is normalized by default so we multiply by the number of tokens
                 # This way we can normalize by the total number of tokens if we're accumulating gradients
                 current_loss = self._loss_step(batch) * current_num_tokens
+
+                self._sampler.after_forward(idx, batch, current_loss)
+
                 running_loss += current_loss
                 current_loss.backward()
 
@@ -774,6 +781,8 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 # Note we are stepping each batch, which might not include optimizer step in the trace
                 # if the schedule cycle doesn't align with gradient accumulation.
                 self._profiler.step()
+
+            self._sampler.post_epoch()
 
             self.epochs_run += 1
             self.save_checkpoint(epoch=curr_epoch)

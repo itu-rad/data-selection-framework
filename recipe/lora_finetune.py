@@ -35,6 +35,8 @@ from torchtune.training import DummyProfiler, PROFILER_KEY
 
 from tqdm import tqdm
 
+from selection import SelectiveSampler, HalfSampler, FullSampler
+
 log = utils.get_logger("DEBUG")
 
 
@@ -516,11 +518,11 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         shuffle: bool,
         batch_size: int,
         collate_fn: str,
-    ) -> Tuple[DistributedSampler, DataLoader]:
+    ) -> Tuple[SelectiveSampler, DataLoader]:
         """
-        All data related setup happens here. Currently this recipe only supports
-        Map-style Datasets which fit into memory and an option for random shuffling.
-        Samplers, iterable datasets, and streaming datasets are not supported.
+        All data related setup happens here. Currently this recipe supports
+        SelectiveSampler with Map-style Datasets which fit into memory.
+        Other samplers, iterable datasets and streaming datasets are not supported.
         """
         if isinstance(cfg_dataset, ListConfig):
             datasets = [
@@ -538,17 +540,19 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(collate_fn)
 
-        sampler = DistributedSampler(
+        # TODO: make commandline arg
+        sampler = HalfSampler(
             ds,
             num_replicas=1,
             rank=0,
             shuffle=shuffle,
             seed=0,
         )
+
         dataloader = DataLoader(
             dataset=ds,
-            sampler=sampler,
             batch_size=batch_size,
+            sampler=sampler,
             # dropping last avoids shape issues with compile + flex attention
             drop_last=True,
             collate_fn=(
@@ -562,7 +566,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             ),
         )
 
-        log.info("Dataset and Sampler are initialized.")
+        log.info("Dataset and SelectiveSampler are initialized.")
 
         return sampler, dataloader
 
@@ -675,6 +679,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                 self._sampler.set_epoch(curr_epoch)
 
                 pbar = tqdm(total=self._steps_per_epoch)
+                self._sampler.pre_epoch()
                 for idx, batch in enumerate(self._dataloader):
                     if (
                         self.max_steps_per_epoch is not None
@@ -682,6 +687,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                         == self.max_steps_per_epoch
                     ):
                         break
+
+                    self._sampler.on_batch(idx, batch)
 
                     # Start tracking CUDA memory for active steps for just the first epoch
                     if (
@@ -703,6 +710,9 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                     # Loss is normalized by default so we multiply by the number of tokens
                     # This way we can normalize by the total number of tokens if we're accumulating gradients
                     current_loss = self._loss_step(batch) * current_num_tokens
+
+                    self._sampler.after_forward(idx, batch, current_loss)
+
                     running_loss += current_loss
                     current_loss.backward()
 
@@ -768,6 +778,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                     # Note we are stepping each batch, which might not include optimizer step in the trace
                     # if the schedule cycle doesn't align with gradient accumulation.
                     prof.step()
+
+                self._sampler.post_epoch()
 
                 self.epochs_run += 1
                 start_save_checkpoint = time.perf_counter()
