@@ -17,6 +17,9 @@ from torch import nn
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader, DistributedSampler
 
+from misc.indexed_ds import IndexedWrapperDataset
+from misc.collate import collate_with_sample_id
+from selection.loss_sampler import LossBasedSampler
 from torchtune import config, modules, training, utils
 from torchtune.config._utils import _get_component_from_path
 from torchtune.data import padded_collate_packed
@@ -570,28 +573,34 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         collate_fn = _get_component_from_path(collate_fn)
 
         # TODO: make commandline arg
-        sampler = HalfSampler(
+        half_sampler = HalfSampler(
             ds,
             num_replicas=1,
             rank=0,
             shuffle=shuffle,
             seed=0,
         )
-        dataloader = DataLoader(
-            dataset=ds,
-            batch_size=batch_size,
-            sampler=sampler,
-            # dropping last avoids shape issues with compile + flex attention
-            drop_last=True,
-            collate_fn=(
-                partial(
+
+        loss_sampler = LossBasedSampler(ds, loss_fn=self._loss_fn, num_replicas=1, rank=0, shuffle=shuffle, seed=0, sampling_ratio=cfg_dataset.get("sampling_ratio", 0.5))
+
+        sampler = loss_sampler
+
+        # Default torchtune collation code
+        collate_fn = partial(
                     collate_fn,
                     padding_idx=self._tokenizer.pad_id,
                     ignore_idx=self._loss_fn.ignore_index,
-                )
-                if not packed
-                else padded_collate_packed
-            ),
+                    ) if not packed else padded_collate_packed 
+
+        # Ensure we keep the sample id
+        collate_fn = partial(collate_with_sample_id, base_collate_fn=collate_fn)
+
+        dataloader = DataLoader(
+            dataset=IndexedWrapperDataset(ds),
+            batch_size=batch_size,
+            sampler=sampler,
+            drop_last=True, # dropping last avoids shape issues with compile + flex attention
+            collate_fn=collate_fn
         )
 
         log.info("Dataset and SelectiveSampler are initialized.")
@@ -624,6 +633,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             intermediate_checkpoint=(epoch + 1 < self.total_epochs),
         )
 
+    
     def _loss_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         # Shape [b, s], needed for the loss not the model
         labels = batch.pop("labels")
@@ -647,6 +657,22 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         del logits
 
         return loss
+    
+    def _forward_pass(self, batch: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Forward pass without loss calculation.
+
+        Returns:
+            logits: Tensor of shape [B, seq_len, vocab_size]
+            shifted_labels: Tensor of shape [B, seq_len] (for scoring)
+        """
+        labels = batch.pop("labels")
+        with self.activations_handling_ctx:
+            logits = self._model(**batch)
+        batch_size = labels.size(0)
+        shifted_labels = torch.hstack((labels[..., 1:], self.ignore_labels_cache[:batch_size]))
+        batch["labels"] = labels  # restore
+        return logits, shifted_labels
 
     def train(self) -> None:
         """
@@ -675,6 +701,19 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
             pbar = tqdm(total=self._steps_per_epoch)
             self._sampler.pre_epoch()
+            # ----- First Pass: Scoring Phase -----
+            utils.get_logger("DEBUG").info("Starting scoring pass for epoch %d", curr_epoch)
+            for idx, batch in enumerate(self._dataloader):
+                utils.batch_to_device(batch, self._device)
+                # TODO: optionally disable grad to speed this up.
+                logits, shifted_labels = self._forward_pass(batch)
+                sample_ids = batch["sample_ids"].tolist()
+                self._sampler.inform_logits(sample_ids, logits, shifted_labels)
+
+            self._sampler.sample()
+            utils.get_logger("DEBUG").info("Scoring complete; selected %d samples", self._sampler.mask.sum().item())
+
+            # ----- Second pass: Training phase (uses updated sampler mask) -----
             for idx, batch in enumerate(self._dataloader):
                 if (
                     self.max_steps_per_epoch is not None
