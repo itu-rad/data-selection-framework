@@ -701,11 +701,12 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             # in case shuffle is True
             self._sampler.set_epoch(curr_epoch)
 
-            pbar = tqdm(total=self._steps_per_epoch)
             self._sampler.pre_epoch()
             # ----- First Pass: Scoring Phase -----
             utils.get_logger("DEBUG").info("Starting scoring pass for epoch %d", curr_epoch)
+            pbar = tqdm(desc="Scoring", total=self._steps_per_epoch)
             for idx, batch in enumerate(self._dataloader):
+                pbar.update(1)
                 utils.batch_to_device(batch, self._device)
                 # TODO: optionally disable grad to speed this up.
                 logits, shifted_labels = self._forward_pass(batch)
@@ -716,6 +717,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             utils.get_logger("DEBUG").info("Scoring complete; selected %d samples", self._sampler.mask.sum().item())
 
             # ----- Second pass: Training phase (uses updated sampler mask) -----
+            pbar = tqdm(desc="Training", total=self._steps_per_epoch)
             for idx, batch in enumerate(self._dataloader):
                 if (
                     self.max_steps_per_epoch is not None
