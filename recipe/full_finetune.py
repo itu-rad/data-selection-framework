@@ -706,7 +706,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             for idx, batch in enumerate(self._dataloader):
                 utils.batch_to_device(batch, self._device)
                 # TODO: optionally disable grad to speed this up.
-                logits, shifted_labels = self._forward_pass(batch)
+                logits, shifted_labels = self._forward_pass(batch.pop("sample_ids", None))
                 sample_ids = batch["sample_ids"].tolist()
                 self._sampler.inform_logits(sample_ids, logits, shifted_labels)
 
