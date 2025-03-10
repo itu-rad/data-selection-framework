@@ -79,6 +79,8 @@ class LossBasedSampler(SelectiveSampler):
             self.mask = torch.ones(len(self.dataset), dtype=torch.bool)
             return
 
+        print(f"Saw {len(self._loss_buffer.keys())} sample IDs in total.")
+
         # Compute average loss for each scored sample.
         all_sample_ids = list(self._loss_buffer.keys())
         avg_losses = []
@@ -92,6 +94,9 @@ class LossBasedSampler(SelectiveSampler):
         
         num_scored = len(all_sample_ids)
         num_select = max(1, int(self.sampling_ratio * num_scored))
+
+        print(f"num_scored = {num_scored}, num_select = {num_select}, mask sum = {self.mask.sum()}")
+
         selected_idxs_in_scored = torch.multinomial(probs, num_select, replacement=False)
         selected_sample_ids = set(all_sample_ids[i] for i in selected_idxs_in_scored.tolist())
 
@@ -100,3 +105,5 @@ class LossBasedSampler(SelectiveSampler):
             if sid in selected_sample_ids:
                 mask[sid] = True
         self.mask = mask
+
+        print(f"new mask sum = {self.mask.sum()}")

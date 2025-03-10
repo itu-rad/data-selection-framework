@@ -314,19 +314,8 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         # Finally update the recipe state which can only be correctly set after all of the
         # other components have been initialized and updated.
-        #
-        # Number of training steps in each epoch depends on the number of batches produced
-        # by the dataloader, the max_steps_per_epoch param set by the user and the
-        # gradient_accumulation_steps param. This value is used for logging and tracking
-        # training state. The computation should happen after the dataloader has been setup
-        self._steps_per_epoch = (
-            len(self._dataloader) // self._gradient_accumulation_steps
-        )
-        if (
-            self.max_steps_per_epoch is not None
-            and self.max_steps_per_epoch < self._steps_per_epoch
-        ):
-            self._steps_per_epoch = self.max_steps_per_epoch
+        self._set_steps_per_epoch()
+
         self.global_step = self.epochs_run * self._steps_per_epoch
 
         # Setup lr scheduler
@@ -344,6 +333,21 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         self.ignore_labels_cache = torch.full(
             (cfg.batch_size, 1), self._loss_fn.ignore_index, device=self._device
         )
+
+    def _set_steps_per_epoch(self) -> None:
+        # Number of training steps in each epoch depends on the number of batches produced
+        # by the dataloader, the max_steps_per_epoch param set by the user and the
+        # gradient_accumulation_steps param. This value is used for logging and tracking
+        # training state. The computation should happen after the dataloader has been setup
+        self._steps_per_epoch = (
+            len(self._dataloader) // self._gradient_accumulation_steps
+        )
+        if (
+            self.max_steps_per_epoch is not None
+            and self.max_steps_per_epoch < self._steps_per_epoch
+        ):
+            self._steps_per_epoch = self.max_steps_per_epoch
+
 
     def _setup_profiler(
         self, cfg_profiler: Optional[DictConfig] = None
@@ -717,6 +721,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                     self._sampler.inform_logits(sample_ids, logits, shifted_labels)
 
             self._sampler.sample()
+            self._set_steps_per_epoch()
             utils.get_logger("DEBUG").info("Scoring complete; selected %d samples", self._sampler.mask.sum().item())
 
             # ----- Second pass: Training phase (uses updated sampler mask) -----
