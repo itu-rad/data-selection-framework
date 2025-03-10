@@ -95,15 +95,12 @@ class LossBasedSampler(SelectiveSampler):
         num_scored = len(all_sample_ids)
         num_select = max(1, int(self.sampling_ratio * num_scored))
 
-        print(f"num_scored = {num_scored}, num_select = {num_select}, mask sum = {self.mask.sum()}")
+        print(f"num_scored = {num_scored}, num_select = {num_select}, mask sum = {sum(self.mask)}")
 
         selected_idxs_in_scored = torch.multinomial(probs, num_select, replacement=False)
         selected_sample_ids = set(all_sample_ids[i] for i in selected_idxs_in_scored.tolist())
 
-        mask = torch.zeros(len(self.dataset), dtype=torch.bool)
-        for sid in range(len(self.dataset)):
-            if sid in selected_sample_ids:
-                mask[sid] = True
-        self.mask = mask
-
-        print(f"new mask sum = {self.mask.sum()}")
+        mask = [sid in selected_sample_ids for sid in range(len(self.dataset))]
+        self.set_mask(mask)
+        
+        print(f"new mask sum = {sum(self.mask)}")
