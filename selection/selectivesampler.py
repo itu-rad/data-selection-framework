@@ -30,6 +30,7 @@ class SelectiveSampler(DistributedSampler, ABC):
         )
         self.mask = None
         self.set_num_selected_samples()
+        self.no_grad_scoring = False
 
     def set_mask(self, mask):
         """Set a boolean mask to filter samples"""

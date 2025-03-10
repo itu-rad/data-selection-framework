@@ -28,6 +28,7 @@ class LossBasedSampler(SelectiveSampler):
         # loss_buffer is a dict mapping dataset index -> accumulated loss and token count.
         self._loss_buffer = {}  # {sample_id: (loss_sum, valid_tokens)}
         self.mask = None  # Boolean tensor of size len(dataset)
+        self.no_grad_scoring = True
     
     def set_num_selected_samples(self) -> None:
         self._num_selected_samples = len(self.dataset)

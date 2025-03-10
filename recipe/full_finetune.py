@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import contextlib
 import sys
 import time
 from functools import partial
@@ -708,10 +709,11 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             for idx, batch in enumerate(self._dataloader):
                 pbar.update(1)
                 utils.batch_to_device(batch, self._device)
-                # TODO: optionally disable grad to speed this up.
-                logits, shifted_labels = self._forward_pass(batch)
-                sample_ids = batch["sample_ids"].tolist()
-                self._sampler.inform_logits(sample_ids, logits, shifted_labels)
+                no_grad_mgr = torch.inference_mode() if self._sampler.no_grad_scoring else contextlib.nullcontext()
+                with no_grad_mgr:
+                    logits, shifted_labels = self._forward_pass(batch)
+                    sample_ids = batch["sample_ids"].tolist()
+                    self._sampler.inform_logits(sample_ids, logits, shifted_labels)
 
             self._sampler.sample()
             utils.get_logger("DEBUG").info("Scoring complete; selected %d samples", self._sampler.mask.sum().item())
