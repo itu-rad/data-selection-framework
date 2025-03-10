@@ -666,8 +666,11 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             logits: Tensor of shape [B, seq_len, vocab_size]
             shifted_labels: Tensor of shape [B, seq_len] (for scoring)
         """
+        log.info(f"batch keys 1: {batch.keys()}")
         labels = batch.pop("labels")
+        log.info(f"batch keys 2: {batch.keys()}")
         with self.activations_handling_ctx:
+            log.info(f"batch keys 3: {batch.keys()}")
             logits = self._model(**batch)
         batch_size = labels.size(0)
         shifted_labels = torch.hstack((labels[..., 1:], self.ignore_labels_cache[:batch_size]))
@@ -706,7 +709,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             for idx, batch in enumerate(self._dataloader):
                 utils.batch_to_device(batch, self._device)
                 # TODO: optionally disable grad to speed this up.
-                logits, shifted_labels = self._forward_pass(batch.pop("sample_ids", None))
+                logits, shifted_labels = self._forward_pass(batch)
                 sample_ids = batch["sample_ids"].tolist()
                 self._sampler.inform_logits(sample_ids, logits, shifted_labels)
 
