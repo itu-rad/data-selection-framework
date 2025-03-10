@@ -35,8 +35,10 @@ class LossBasedSampler(SelectiveSampler):
     def pre_epoch(self) -> None:
         # Reset the loss buffer and mask at the start of each epoch.
         self._loss_buffer = {}
-        self.mask = None
-    
+        n = len(self.dataset)
+        mask = [True] * n
+        self.set_mask(mask)
+
     def post_epoch(self) -> None:
         pass
 
