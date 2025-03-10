@@ -1,3 +1,4 @@
+import torch
 from selection.selectivesampler import SelectiveSampler
 
 
@@ -30,4 +31,10 @@ class HalfSampler(SelectiveSampler):
 
     def after_forward(self, idx: int, batch: dict, current_loss: float) -> None:
         """No-op after forward hook"""
+        pass
+
+    def inform_logits(self, sample_ids: list[int], logits: torch.Tensor, shifted_labels: torch.Tensor) -> None:
+        pass
+
+    def sample(self) -> None:
         pass

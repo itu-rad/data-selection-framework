@@ -8,7 +8,7 @@ We evaluate data selection methods on a range of tuning tasks.
 
 ```bash
 # Create the 'selection' conda environment
-conda env create -n conda.yaml
+conda env create -f conda.yaml
 conda activate selection
 
 # Now set the HF_TOKEN environment variable in your conda environment
