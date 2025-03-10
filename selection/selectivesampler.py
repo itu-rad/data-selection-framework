@@ -51,14 +51,9 @@ class SelectiveSampler(DistributedSampler, ABC):
         return iter(indices)
 
     def __len__(self) -> int:
-        return self._num_selected_samples
-
-    @abstractmethod
-    def set_num_selected_samples(self) -> None:
-        """Hook called on initialisation. Set expected number of selected samples for dataset len.
-        Temporary workaround for __len__ method to return correct value. Must be implemented by subclasses
-        """
-        pass
+        if self.mask is not None:
+            return sum(self.mask)
+        return len(self.dataset)
 
     @abstractmethod
     def pre_epoch(self) -> None:

@@ -29,10 +29,7 @@ class LossBasedSampler(SelectiveSampler):
         self._loss_buffer = {}  # {sample_id: (loss_sum, valid_tokens)}
         self.mask = None  # Boolean tensor of size len(dataset)
         self.no_grad_scoring = True
-    
-    def set_num_selected_samples(self) -> None:
-        self._num_selected_samples = len(self.dataset)
-    
+        
     def pre_epoch(self) -> None:
         # Reset the loss buffer and mask at the start of each epoch.
         self._loss_buffer = {}
@@ -93,14 +90,15 @@ class LossBasedSampler(SelectiveSampler):
         probs = probs / probs.sum()
         
         num_scored = len(all_sample_ids)
-        num_select = max(1, int(self.sampling_ratio * num_scored))
+        self._num_selected_samples = max(1, int(self.sampling_ratio * num_scored))
 
-        print(f"num_scored = {num_scored}, num_select = {num_select}, mask sum = {sum(self.mask)}")
+        print(f"num_scored = {num_scored}, num_select = {self._num_selected_samples}, mask sum = {sum(self.mask)}")
 
-        selected_idxs_in_scored = torch.multinomial(probs, num_select, replacement=False)
+        selected_idxs_in_scored = torch.multinomial(probs, self._num_selected_samples, replacement=False)
         selected_sample_ids = set(all_sample_ids[i] for i in selected_idxs_in_scored.tolist())
 
         mask = [sid in selected_sample_ids for sid in range(len(self.dataset))]
+        assert len(mask) == len(self.mask)
         self.set_mask(mask)
-        
+
         print(f"new mask sum = {sum(self.mask)}")

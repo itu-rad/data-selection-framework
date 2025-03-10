@@ -10,10 +10,6 @@ class HalfSampler(SelectiveSampler):
     2. Implementing required hook methods with simple pass-through behavior
     """
 
-    def set_num_selected_samples(self):
-        """Set expected number of selected samples for dataset len"""
-        self._num_selected_samples = self.num_samples // 2
-
     def pre_epoch(self) -> None:
         """Set mask to select first half of samples before each epoch starts"""
         n = len(self.dataset)
