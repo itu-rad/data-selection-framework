@@ -722,7 +722,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
             self._sampler.sample()
             self._set_steps_per_epoch()
-            utils.get_logger("DEBUG").info("Scoring complete; selected %d samples", self._sampler.mask.sum().item())
+            utils.get_logger("DEBUG").info("Scoring complete; selected %d samples", sum(self._sampler.mask))
 
             # ----- Second pass: Training phase (uses updated sampler mask) -----
             pbar = tqdm(desc="Training", total=self._steps_per_epoch)
