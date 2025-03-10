@@ -29,7 +29,6 @@ class SelectiveSampler(DistributedSampler, ABC):
             dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed
         )
         self.mask = None
-        self.set_num_selected_samples()
         self.no_grad_scoring = False
 
     def set_mask(self, mask):
