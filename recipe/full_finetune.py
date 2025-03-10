@@ -666,15 +666,14 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             logits: Tensor of shape [B, seq_len, vocab_size]
             shifted_labels: Tensor of shape [B, seq_len] (for scoring)
         """
-        log.info(f"batch keys 1: {batch.keys()}")
         labels = batch.pop("labels")
-        log.info(f"batch keys 2: {batch.keys()}")
+        sample_ids = batch.pop("sample_ids")
         with self.activations_handling_ctx:
-            log.info(f"batch keys 3: {batch.keys()}")
             logits = self._model(**batch)
         batch_size = labels.size(0)
         shifted_labels = torch.hstack((labels[..., 1:], self.ignore_labels_cache[:batch_size]))
         batch["labels"] = labels  # restore
+        batch["sample_ids"] = sample_ids
         return logits, shifted_labels
 
     def train(self) -> None:
