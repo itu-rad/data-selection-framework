@@ -638,6 +638,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
     def _loss_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         # Shape [b, s], needed for the loss not the model
         labels = batch.pop("labels")
+        sample_ids = batch.pop("sample_ids")
 
         with self.activations_handling_ctx:
             logits = self._model(**batch)
