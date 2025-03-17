@@ -1,6 +1,8 @@
 from torch.utils.data import Dataset
 
 class IndexedWrapperDataset(Dataset):
+    """Generic dataset wrapper that adds sample indices to the items."""
+
     def __init__(self, dataset: Dataset):
         self.dataset = dataset
 

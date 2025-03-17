@@ -637,32 +637,6 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             epoch=epoch,
             intermediate_checkpoint=(epoch + 1 < self.total_epochs),
         )
-
-    
-    def _loss_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
-        # Shape [b, s], needed for the loss not the model
-        labels = batch.pop("labels")
-        sample_ids = batch.pop("sample_ids")
-
-        with self.activations_handling_ctx:
-            logits = self._model(**batch)
-
-        # Shift labels to compute loss
-        # equivalent to doing labels[..., 1:] and logits[..., :-1, :]
-        # But this way we dont need to slice the logits. We just add an ignore index to labels.
-        labels = torch.hstack(
-            (labels[..., 1:], self.ignore_labels_cache[: labels.shape[0]])
-        )
-        if not isinstance(logits, list):
-            labels = labels.reshape(-1)
-            logits = logits.reshape(-1, logits.size(-1))
-
-        # Compute loss
-        loss = self._loss_fn(logits, labels)
-        # free logits otherwise it peaks backward memory
-        del logits
-
-        return loss
     
     def _forward_pass(self, batch: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -681,6 +655,22 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         batch["labels"] = labels  # restore
         batch["sample_ids"] = sample_ids
         return logits, shifted_labels
+
+    def _loss_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        logits, labels = self._forward_pass(batch)
+        _ = batch.pop("labels")
+        _ = batch.pop("sample_ids")
+
+        if not isinstance(logits, list):
+            labels = labels.reshape(-1)
+            logits = logits.reshape(-1, logits.size(-1))
+
+        # Compute loss
+        loss = self._loss_fn(logits, labels)
+        # free logits otherwise it peaks backward memory
+        del logits
+
+        return loss
 
     def train(self) -> None:
         """
