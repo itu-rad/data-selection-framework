@@ -172,3 +172,6 @@ cython_debug/
 
 # Ignored folders
 /model_cache/
+
+# radT environment init
+environment.sh

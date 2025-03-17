@@ -91,16 +91,18 @@ tune cp $model_config $config_path --make-parents
 
 ### Running finetuning recipes
 
-You can finetune Llama3.2 1B on a single GPU using the following command:
+You can finetune Llama3.2 1B on a single GPU using the following command (with/without radT):
 
 ```bash
-tune run recipe/full_finetune.py --config config/llama3_2/1b_full/train.yaml
+python tune.py run recipe/full_finetune.py --config config/llama3_2/1b_full/train.yaml
+python -m radt --local --manual tune.py run recipe/full_finetune.py --config config/llama3_2/1b_full/train.yaml
 ```
 
 Or with LoRA:
 
 ```bash
-tune run recipe/lora_finetune.py --config config/llama3_2/1b_lora/train.yaml
+python tune.py run recipe/lora_finetune.py --config config/llama3_2/1b_lora/train.yaml
+python -m radt --local --manual tune.py run recipe/lora_finetune.py --config config/llama3_2/1b_lora/train.yaml
 ```
 
 &nbsp;
@@ -134,7 +136,7 @@ Further torchtune examples: [https://github.com/pytorch/torchtune/blob/main/docs
 
 ### Infering Models 
 
-Begin by createing a custom generation config, either by running the following commands 
+Begin by creating a custom generation config, either by running the following commands 
 or creating your own: 
 
 ``` bash
