@@ -319,8 +319,9 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         self.global_step = self.epochs_run * self._steps_per_epoch
 
         # Setup lr scheduler
+        self._cfg_lr_scheduler = cfg.get("lr_scheduler", None)
         self._lr_scheduler = self._setup_lr_scheduler(
-            cfg_lr_scheduler=cfg.get("lr_scheduler", None),
+            cfg_lr_scheduler=self._cfg_lr_scheduler,
             num_training_steps=self.total_epochs * self._steps_per_epoch,
             last_epoch=self.global_step - 1,
         )
@@ -712,6 +713,15 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
             self._sampler.sample()
             self._set_steps_per_epoch()
+            
+            # We need to re-setup the scheduler every epoch because the sampling changes `self._steps_per_epoch`
+            # Since we use `last_epoch` we don't lose state.
+
+            self._lr_scheduler = self._setup_lr_scheduler(
+                cfg_lr_scheduler=self._cfg_lr_scheduler,
+                num_training_steps=self.total_epochs * self._steps_per_epoch,
+                last_epoch=self.global_step - 1,
+            )
             utils.get_logger("DEBUG").info("Scoring complete; selected %d samples", sum(self._sampler.mask))
 
             # ----- Second pass: Training phase (uses updated sampler mask) -----
