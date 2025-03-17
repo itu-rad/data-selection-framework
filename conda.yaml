@@ -3,6 +3,7 @@ dependencies:
   - python=3.12
   - pip
   - boto3
+  - conda-forge::gcc_linux-64  # Correct GCC package for Linux. Necessary for triton.  
   - pip:
       - mlflow
       - psutil
