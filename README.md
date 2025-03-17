@@ -14,7 +14,7 @@ conda activate selection
 
 
 # If you want to install additional dependencies add dependencies in conda.yaml and run:
-conda env update --file conda.yaml --prune
+conda env update --file conda.yaml
 
 
 
