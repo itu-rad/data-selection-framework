@@ -29,7 +29,7 @@ class SelectiveSampler(DistributedSampler, ABC):
             dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed
         )
         self.mask = None
-        self.set_num_selected_samples()
+        self.no_grad_scoring = False
 
     def set_mask(self, mask):
         """Set a boolean mask to filter samples"""
@@ -50,14 +50,9 @@ class SelectiveSampler(DistributedSampler, ABC):
         return iter(indices)
 
     def __len__(self) -> int:
-        return self._num_selected_samples
-
-    @abstractmethod
-    def set_num_selected_samples(self) -> None:
-        """Hook called on initialisation. Set expected number of selected samples for dataset len.
-        Temporary workaround for __len__ method to return correct value. Must be implemented by subclasses
-        """
-        pass
+        if self.mask is not None:
+            return sum(self.mask)
+        return len(self.dataset)
 
     @abstractmethod
     def pre_epoch(self) -> None:
@@ -87,5 +82,22 @@ class SelectiveSampler(DistributedSampler, ABC):
             idx (int): The index/step number of the current batch
             batch (dict): The batch data dictionary containing inputs and labels
             current_loss (float): The loss value from the current forward pass
+        """
+        pass
+
+    @abstractmethod
+    def inform_logits(self, idx: int, batch: dict, current_loss: float) -> None:
+        """Hook called after model forward pass. Must be implemented by subclasses.
+
+        Args:
+            idx (int): The index/step number of the current batch
+            batch (dict): The batch data dictionary containing inputs and labels
+            current_loss (float): The loss value from the current forward pass
+        """
+        pass
+
+    @abstractmethod
+    def sample(self) -> None:
+        """Called after first phase forward pass in sample-then-batch
         """
         pass

@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import contextlib
 import radt
 import sys
 import time
@@ -18,6 +19,9 @@ from torch import nn
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader, DistributedSampler
 
+from misc.indexed_ds import IndexedWrapperDataset
+from misc.collate import collate_with_sample_id
+from selection.loss_sampler import LossBasedSampler
 from torchtune import config, modules, training, utils
 from torchtune.config._utils import _get_component_from_path
 from torchtune.data import padded_collate_packed
@@ -311,24 +315,14 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         # Finally update the recipe state which can only be correctly set after all of the
         # other components have been initialized and updated.
-        #
-        # Number of training steps in each epoch depends on the number of batches produced
-        # by the dataloader, the max_steps_per_epoch param set by the user and the
-        # gradient_accumulation_steps param. This value is used for logging and tracking
-        # training state. The computation should happen after the dataloader has been setup
-        self._steps_per_epoch = (
-            len(self._dataloader) // self._gradient_accumulation_steps
-        )
-        if (
-            self.max_steps_per_epoch is not None
-            and self.max_steps_per_epoch < self._steps_per_epoch
-        ):
-            self._steps_per_epoch = self.max_steps_per_epoch
+        self._set_steps_per_epoch()
+
         self.global_step = self.epochs_run * self._steps_per_epoch
 
         # Setup lr scheduler
+        self._cfg_lr_scheduler = cfg.get("lr_scheduler", None)
         self._lr_scheduler = self._setup_lr_scheduler(
-            cfg_lr_scheduler=cfg.get("lr_scheduler", None),
+            cfg_lr_scheduler=self._cfg_lr_scheduler,
             num_training_steps=self.total_epochs * self._steps_per_epoch,
             last_epoch=self.global_step - 1,
         )
@@ -341,6 +335,21 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         self.ignore_labels_cache = torch.full(
             (cfg.batch_size, 1), self._loss_fn.ignore_index, device=self._device
         )
+
+    def _set_steps_per_epoch(self) -> None:
+        # Number of training steps in each epoch depends on the number of batches produced
+        # by the dataloader, the max_steps_per_epoch param set by the user and the
+        # gradient_accumulation_steps param. This value is used for logging and tracking
+        # training state. The computation should happen after the dataloader has been setup
+        self._steps_per_epoch = (
+            len(self._dataloader) // self._gradient_accumulation_steps
+        )
+        if (
+            self.max_steps_per_epoch is not None
+            and self.max_steps_per_epoch < self._steps_per_epoch
+        ):
+            self._steps_per_epoch = self.max_steps_per_epoch
+
 
     def _setup_profiler(
         self, cfg_profiler: Optional[DictConfig] = None
@@ -571,28 +580,34 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         collate_fn = _get_component_from_path(collate_fn)
 
         # TODO: make commandline arg
-        sampler = HalfSampler(
+        half_sampler = HalfSampler(
             ds,
             num_replicas=1,
             rank=0,
             shuffle=shuffle,
             seed=0,
         )
-        dataloader = DataLoader(
-            dataset=ds,
-            batch_size=batch_size,
-            sampler=sampler,
-            # dropping last avoids shape issues with compile + flex attention
-            drop_last=True,
-            collate_fn=(
-                partial(
+
+        loss_sampler = LossBasedSampler(ds, loss_fn=self._loss_fn, num_replicas=1, rank=0, shuffle=shuffle, seed=0, sampling_ratio=cfg_dataset.get("sampling_ratio", 0.5))
+
+        sampler = loss_sampler
+
+        # Default torchtune collation code
+        collate_fn = partial(
                     collate_fn,
                     padding_idx=self._tokenizer.pad_id,
                     ignore_idx=self._loss_fn.ignore_index,
-                )
-                if not packed
-                else padded_collate_packed
-            ),
+                    ) if not packed else padded_collate_packed 
+
+        # Ensure we keep the sample id
+        collate_fn = partial(collate_with_sample_id, base_collate_fn=collate_fn)
+
+        dataloader = DataLoader(
+            dataset=IndexedWrapperDataset(ds),
+            batch_size=batch_size,
+            sampler=sampler,
+            drop_last=True, # dropping last avoids shape issues with compile + flex attention
+            collate_fn=collate_fn
         )
 
         log.info("Dataset and SelectiveSampler are initialized.")
@@ -627,20 +642,30 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             epoch=epoch,
             intermediate_checkpoint=(epoch + 1 < self.total_epochs),
         )
+    
+    def _forward_pass(self, batch: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Forward pass without loss calculation.
 
-    def _loss_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
-        # Shape [b, s], needed for the loss not the model
+        Returns:
+            logits: Tensor of shape [B, seq_len, vocab_size]
+            shifted_labels: Tensor of shape [B, seq_len] (for scoring)
+        """
         labels = batch.pop("labels")
-
+        sample_ids = batch.pop("sample_ids")
         with self.activations_handling_ctx:
             logits = self._model(**batch)
+        batch_size = labels.size(0)
+        shifted_labels = torch.hstack((labels[..., 1:], self.ignore_labels_cache[:batch_size]))
+        batch["labels"] = labels  # restore
+        batch["sample_ids"] = sample_ids
+        return logits, shifted_labels
 
-        # Shift labels to compute loss
-        # equivalent to doing labels[..., 1:] and logits[..., :-1, :]
-        # But this way we dont need to slice the logits. We just add an ignore index to labels.
-        labels = torch.hstack(
-            (labels[..., 1:], self.ignore_labels_cache[: labels.shape[0]])
-        )
+    def _loss_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        logits, labels = self._forward_pass(batch)
+        _ = batch.pop("labels")
+        _ = batch.pop("sample_ids")
+
         if not isinstance(logits, list):
             labels = labels.reshape(-1)
             logits = logits.reshape(-1, logits.size(-1))
@@ -671,6 +696,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         num_tokens = 0
 
         self._profiler.start()
+        
         with radt.run.RADTBenchmark() as run:
             # self.epochs_run should be non-zero when we're resuming from a checkpoint
             for curr_epoch in range(self.epochs_run, self.total_epochs):
@@ -678,8 +704,34 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 # in case shuffle is True
                 self._sampler.set_epoch(curr_epoch)
 
-                pbar = tqdm(total=self._steps_per_epoch)
                 self._sampler.pre_epoch()
+                # ----- First Pass: Scoring Phase -----
+                utils.get_logger("DEBUG").info("Starting scoring pass for epoch %d", curr_epoch)
+                pbar = tqdm(desc="Scoring", total=self._steps_per_epoch)
+                for idx, batch in enumerate(self._dataloader):
+                    pbar.update(1)
+                    utils.batch_to_device(batch, self._device)
+                    no_grad_mgr = torch.inference_mode() if self._sampler.no_grad_scoring else contextlib.nullcontext()
+                    with no_grad_mgr:
+                        logits, shifted_labels = self._forward_pass(batch)
+                        sample_ids = batch["sample_ids"].tolist()
+                        self._sampler.inform_logits(sample_ids, logits, shifted_labels)
+
+                self._sampler.sample()
+                self._set_steps_per_epoch()
+
+                # We need to re-setup the scheduler every epoch because the sampling changes `self._steps_per_epoch`
+                # Since we use `last_epoch` we don't lose state.
+
+                self._lr_scheduler = self._setup_lr_scheduler(
+                    cfg_lr_scheduler=self._cfg_lr_scheduler,
+                    num_training_steps=self.total_epochs * self._steps_per_epoch,
+                    last_epoch=self.global_step - 1,
+                )
+                utils.get_logger("DEBUG").info("Scoring complete; selected %d samples", sum(self._sampler.mask))
+
+                # ----- Second pass: Training phase (uses updated sampler mask) -----
+                pbar = tqdm(desc="Training", total=self._steps_per_epoch)
                 for idx, batch in enumerate(self._dataloader):
                     if (
                         self.max_steps_per_epoch is not None

@@ -1,3 +1,4 @@
+import torch
 from selection.selectivesampler import SelectiveSampler
 
 
@@ -8,10 +9,6 @@ class HalfSampler(SelectiveSampler):
     1. Setting mask in pre_epoch to select first half of dataset
     2. Implementing required hook methods with simple pass-through behavior
     """
-
-    def set_num_selected_samples(self):
-        """Set expected number of selected samples for dataset len"""
-        self._num_selected_samples = self.num_samples // 2
 
     def pre_epoch(self) -> None:
         """Set mask to select first half of samples before each epoch starts"""
@@ -30,4 +27,10 @@ class HalfSampler(SelectiveSampler):
 
     def after_forward(self, idx: int, batch: dict, current_loss: float) -> None:
         """No-op after forward hook"""
+        pass
+
+    def inform_logits(self, sample_ids: list[int], logits: torch.Tensor, shifted_labels: torch.Tensor) -> None:
+        pass
+
+    def sample(self) -> None:
         pass
