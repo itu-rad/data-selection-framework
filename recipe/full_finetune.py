@@ -580,7 +580,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         collate_fn = _get_component_from_path(collate_fn)
 
         # TODO: make commandline arg
-        half_sampler = HalfSampler(
+        sampler = FullSampler(
             ds,
             num_replicas=1,
             rank=0,

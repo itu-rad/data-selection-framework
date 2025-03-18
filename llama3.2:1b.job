@@ -10,8 +10,8 @@
 echo "Running on $(hostname):"
 nvidia-smi
 
-# define whcih env to work with. 
-source ~/miniconda3/bin/activate selection
+# define which env to work with. 
+source ~/anaconda3/bin/activate selection
 
 # Execute pipeline
 bash run_experiment.sh
