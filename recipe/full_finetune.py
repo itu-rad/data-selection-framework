@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader
 
 from misc.indexed_ds import IndexedWrapperDataset
 from misc.collate import collate_with_sample_id
-from selection.loss_sampler import LossBasedSampler
+from selection.loss_sampler import LossSampler
 from torchtune import config, modules, training, utils
 from torchtune.config._utils import _get_component_from_path
 from torchtune.data import padded_collate_packed
@@ -33,6 +33,7 @@ from torchtune.training.lr_schedulers import get_lr
 from tqdm import tqdm
 
 from selection import SelectiveSampler, HalfSampler, FullSampler
+from misc.instantiate_safe import instantiate_safe
 
 log = utils.get_logger("DEBUG")
 
@@ -310,6 +311,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         collate_name = cfg.get("collate_fn", "torchtune.data.padded_collate_sft")
         self._sampler, self._dataloader = self._setup_data(
             cfg_dataset=cfg.dataset,
+            cfg_sampler=cfg.sampler,
             shuffle=cfg.shuffle,
             batch_size=cfg.batch_size,
             collate_fn=collate_name,
@@ -555,6 +557,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
     def _setup_data(
         self,
         cfg_dataset: DictConfig,
+        cfg_sampler: DictConfig,
         shuffle: bool,
         batch_size: int,
         collate_fn: str,
@@ -564,6 +567,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         SelectiveSampler with Map-style Datasets which fit into memory.
         Other samplers, iterable datasets and streaming datasets are not supported.
         """
+
         if isinstance(cfg_dataset, ListConfig):
             datasets = [
                 config.instantiate(single_cfg_dataset, self._tokenizer)
@@ -575,31 +579,26 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             ds = config.instantiate(cfg_dataset, self._tokenizer)
             packed = cfg_dataset.get("packed", False)
 
+        # Check that component is included and set correctly
+        if cfg_sampler.get("_component_", None) is None:
+            cfg_sampler["_component_"] = "selection.FullSampler"
+
+        sampler = instantiate_safe(
+            # Kwargs in ABC
+            cfg_sampler,
+            dataset=ds,
+            num_replicas=1,
+            rank=0,
+            shuffle=shuffle,
+            seed=0,
+            # Optional kwargs
+            loss_fn=self._loss_fn,
+        )
+
         # Instantiate collate_fn
         if "left_pad_sequence" in collate_fn:
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(collate_fn)
-
-        # TODO: make commandline arg
-        half_sampler = HalfSampler(
-            ds,
-            num_replicas=1,
-            rank=0,
-            shuffle=shuffle,
-            seed=0,
-        )
-
-        loss_sampler = LossBasedSampler(
-            ds,
-            loss_fn=self._loss_fn,
-            num_replicas=1,
-            rank=0,
-            shuffle=shuffle,
-            seed=0,
-            sampling_ratio=cfg_dataset.get("sampling_ratio", 0.5),
-        )
-
-        sampler = loss_sampler
 
         # Default torchtune collation code
         collate_fn = (
@@ -624,7 +623,6 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         )
 
         log.info("Dataset and SelectiveSampler are initialized.")
-
         return sampler, dataloader
 
     def save_checkpoint(self, run, epoch: int) -> None:

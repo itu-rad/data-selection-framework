@@ -21,6 +21,11 @@
 
 output_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/full_single_device # Change it to your preference.
 
+sampler:
+  _component_: selection.LossSampler
+  sampling_ratio: 0.1
+
+
 # Tokenizer
 tokenizer:
   _component_: torchtune.models.llama3.llama3_tokenizer
