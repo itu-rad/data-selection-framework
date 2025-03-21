@@ -32,7 +32,7 @@ from torchtune.training.lr_schedulers import get_lr
 
 from tqdm import tqdm
 
-from selection import SelectiveSampler, HalfSampler, FullSampler
+from selection import SelectiveSampler, HalfSampler, FullSampler, SingleSampler
 
 log = utils.get_logger("DEBUG")
 
