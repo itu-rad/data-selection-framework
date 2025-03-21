@@ -94,15 +94,15 @@ tune cp $model_config $config_path --make-parents
 You can finetune Llama3.2 1B on a single GPU using the following command (with/without radT):
 
 ```bash
-python -u tune.py run recipe/full_finetune.py --config config/llama3_2/1b_full/train.yaml
-python -u -m radt --local --manual tune.py run recipe/full_finetune.py --config config/llama3_2/1b_full/train.yaml
+python tune.py run recipe/full_finetune.py --config config/llama3_2/1b_full/train.yaml
+python -m radt --local --manual tune.py run recipe/full_finetune.py --config config/llama3_2/1b_full/train.yaml
 ```
  
 Or with LoRA:
  
 ```bash
-python -u tune.py run recipe/lora_finetune.py --config config/llama3_2/1b_lora/train.yaml
-python -u -m radt --local --manual tune.py run recipe/lora_finetune.py --config config/llama3_2/1b_lora/train.yaml
+python tune.py run recipe/lora_finetune.py --config config/llama3_2/1b_lora/train.yaml
+python -m radt --local --manual tune.py run recipe/lora_finetune.py --config config/llama3_2/1b_lora/train.yaml
 ```
 
 Saving with RadT with a specific MLflow experiment ID
@@ -111,12 +111,12 @@ Saving with RadT with a specific MLflow experiment ID
 # set experiment_id to the MLflow experiment ID 
 experiment_id=" " 
 # full model 
-python -u -m radt -e $experiment_id --local --manual tune.py run recipe/full_finetune.py --config config/llama3_2/1b_full/train.yaml
+python -m radt -e $experiment_id --local --manual tune.py run recipe/full_finetune.py --config config/llama3_2/1b_full/train.yaml
 ```
 
 ```bash
 # With lora model
-python -u -m radt -e $experiment_id --local --manual tune.py run recipe/lora_finetune.py --config config/llama3_2/1b_full/train.yaml
+python -m radt -e $experiment_id --local --manual tune.py run recipe/lora_finetune.py --config config/llama3_2/1b_full/train.yaml
 ```
 
 
