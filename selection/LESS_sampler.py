@@ -1,4 +1,6 @@
 from selection.selectivesampler import SelectiveSampler
+import subprocess
+
 
 
 class LESSBasedSampler(SelectiveSampler):
@@ -6,15 +8,21 @@ class LESSBasedSampler(SelectiveSampler):
        This sampler can only be utilized with LORA """
 
     """ LESS utilizes 5% of data samples for warmup training. This can be change for experimentation"""
-    def pre_epoch(self, percentage=0.05) -> None:
+    def pre_epoch(self) -> None:    
         """Set mask to select all samples before each epoch starts"""
-        # 
         
-        
-        
-        # n = len(self.dataset)
-        # mask = 
-        # self.set_mask(mask)
+    # STEP 1: Warmup training
+    warmup_process = [
+        "python", "tune.py", "run", "recipe/lora_finetune.py",
+        "--config", "less/warmup_train.yaml"
+    ]
+    # Start the subprocess and wait for it to complete
+    result = subprocess.run(warmup_process, check=True)
+    # The program will not continue until the command finishes
+    print("Warmup finished successfully.")
+    
+    # STEP 2:
+
 
     def post_epoch(self) -> None:
         """No-op post epoch hook"""
