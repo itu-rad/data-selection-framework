@@ -34,3 +34,17 @@ class HalfSampler(SelectiveSampler):
 
     def sample(self) -> None:
         pass
+    
+    
+if __name__ == "__main__":
+    ds = list(range(10))
+    pbs = HalfSampler(ds,num_replicas=1)
+    epochs = 1
+    for e in range(epochs):
+        print(pbs.dataset)
+        pbs.set_epoch(e)
+        pbs.pre_epoch()
+        selected_indices = pbs.__iter__()
+        print(list(selected_indices))
+        print(pbs.mask)
+        print("_____________")
