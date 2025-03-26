@@ -57,9 +57,14 @@ class PercentageBasedSampler(SelectiveSampler):
 
 if __name__ == "__main__":
     ds = list(range(100))
-    pbs = PercentageBasedSampler(ds,rank=0,num_replicas=1)
+    
+    pbs = PercentageBasedSampler(ds,rank=0,num_replicas=1,shuffle=True)
     epochs = 2
     for current_epoch in range(epochs):
+        # perhaps an Suffle_shuffle function would be interesting to implement instead of this if statement?
+        if current_epoch == 1: 
+            pbs.shuffle = False
+        
         print(pbs.dataset)
         pbs.set_epoch(current_epoch)
         pbs.pre_epoch()
