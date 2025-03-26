@@ -43,7 +43,8 @@ class SelectiveSampler(DistributedSampler, ABC):
         if self.mask is None:
             raise RuntimeError("No mask set - call set_mask() before iterating")
 
-        indices = [idx for i, idx in enumerate(indices) if self.mask[idx]]
+        indices = [idx for i, idx in enumerate(indices) if self.mask[i]]
+        
         if not indices:
             raise RuntimeError("No samples selected - mask may be all False or unset")
 
