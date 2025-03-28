@@ -1,6 +1,6 @@
 from selection.selectivesampler import SelectiveSampler
 import subprocess
-
+import os
 
 
 class LESSBasedSampler(SelectiveSampler):
@@ -16,26 +16,29 @@ class LESSBasedSampler(SelectiveSampler):
       self.mask = None
       self.no_grad_scoring = False
     
-    
-    def pre_epoch(self) -> None:    
+    def pre_epoch(self) -> None:
         """Set mask to select all samples before each epoch starts"""
-    # download model
-    # download dataset     
-    # STEP 1: Warmup training
+        warmup_process = [
+            "python", "recipe/test_lora_finetune.py", 
+            "--config", "less/warmup_train.yaml"
+        ]
 
-        
-    warmup_process = [
-        "PYTHONPATH=.:$PYTHONPATH","python","recipe/test_lora_finetune.py",
-        "--config", "less/warmup_train.yaml"
-    ]
-    # Start the subprocess and wait for it to complete
-    print("Starting warmup subprocess")
-    result = subprocess.run(warmup_process, check=True, text=True, shell=True)
-    # The program will not continue until the command finishes
-    print("Warmup finished successfully.")
+        # Set the PYTHONPATH in the environment
+        env = os.environ.copy()
+        env["PYTHONPATH"] = ".:" + env.get("PYTHONPATH", "")
+
+        print("Starting warmup subprocess")
+
+        try:
+            result = subprocess.run(warmup_process, check=True, text=True, shell=False, env=env)
+            print("Warmup finished successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"Warmup subprocess failed with error: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+
     
-    
-    # STEP 2:
+        # STEP 2:
 
 
     def post_epoch(self) -> None:
@@ -50,7 +53,6 @@ class LESSBasedSampler(SelectiveSampler):
         """No-op after forward hook"""
         pass
     
-    
     def inform_logits(self, idx: int, batch: dict, current_loss: float) -> None:
         """Hook called after model forward pass. Must be implemented by subclasses.
 
@@ -61,7 +63,6 @@ class LESSBasedSampler(SelectiveSampler):
         """
         pass
 
-   
     def sample(self) -> None:
         """Called after first phase forward pass in sample-then-batch
         """

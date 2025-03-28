@@ -18,9 +18,6 @@ class PercentageBasedSampler(SelectiveSampler):
         sample_amount = int(n * self.percentage)
         mask = [False] * n 
         mask[:sample_amount] = [True] * sample_amount
-        print(f"Dataset:{len(ds)}")
-        print(f"Mask length:{len(mask)}")
-        
         self.set_mask(mask)
         
 
