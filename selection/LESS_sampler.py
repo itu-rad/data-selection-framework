@@ -18,12 +18,13 @@ class LESSBasedSampler(SelectiveSampler):
     
     def pre_epoch(self) -> None:
         """Set mask to select all samples before each epoch starts"""
+        # Step 1: 
         warmup_process = [
             "python", "recipe/test_lora_finetune.py", 
             "--config", "less/warmup_train.yaml"
         ]
 
-        # Set the PYTHONPATH in the environment
+        # Set the PYTHONPATH in the environment to . parent folder, to include all modules. 
         env = os.environ.copy()
         env["PYTHONPATH"] = ".:" + env.get("PYTHONPATH", "")
 
@@ -32,6 +33,7 @@ class LESSBasedSampler(SelectiveSampler):
         try:
             result = subprocess.run(warmup_process, check=True, text=True, shell=False, env=env)
             print("Warmup finished successfully.")
+            
         except subprocess.CalledProcessError as e:
             print(f"Warmup subprocess failed with error: {e}")
         except Exception as e:

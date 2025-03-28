@@ -70,7 +70,7 @@ loss:
   _component_: torchtune.modules.loss.CEWithChunkedOutputLoss
 
 # Training
-epochs: 4 # LESS default = 4
+epochs: 1 # LESS default = 4
 max_steps_per_epoch: null # LESS default = unknown
 gradient_accumulation_steps: 32  # Use to increase effective batch size # LESS default = 32
 clip_grad_norm: null
@@ -88,8 +88,8 @@ device: cuda
 dtype: bf16 # LESS default = "bf16 True"
 
 # Activations Memory
-enable_activation_checkpointing: False  # True reduces memory
-enable_activation_offloading: False  # True reduces memory
+enable_activation_checkpointing: True  # True reduces memory
+enable_activation_offloading: True  # True reduces memory
 
 
 # Profiler (disabled)

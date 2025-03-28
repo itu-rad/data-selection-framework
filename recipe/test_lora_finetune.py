@@ -321,7 +321,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         # for logging and tracking training state. This should be computed after the dataloader
         # has been setup
         self._steps_per_epoch = (
-            len(self._dataloader) // self._gradient_accumulation_steps
+            # implemented static LESS warmup percentage, so tqdm will regard total bar to desired warmup percentage. 
+            int(len(self._dataloader) // self._gradient_accumulation_steps * 0.05) 
         )
         if (
             self.max_steps_per_epoch is not None
