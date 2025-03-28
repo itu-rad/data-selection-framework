@@ -20,10 +20,11 @@ class LESSBasedSampler(SelectiveSampler):
         """Set mask to select all samples before each epoch starts"""
         # Step 1: 
         warmup_process = [
-            "python", "recipe/test_lora_finetune.py", 
+            "python", "-m", "radt","--local","--manual","tune.py","run","recipe/test_lora_finetune.py", 
             "--config", "less/warmup_train.yaml"
         ]
-
+        
+        
         # Set the PYTHONPATH in the environment to . parent folder, to include all modules. 
         env = os.environ.copy()
         env["PYTHONPATH"] = ".:" + env.get("PYTHONPATH", "")
