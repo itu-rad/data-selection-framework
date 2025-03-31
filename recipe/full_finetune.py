@@ -32,7 +32,7 @@ from torchtune.training.lr_schedulers import get_lr
 
 from tqdm import tqdm
 
-from selection import SelectiveSampler, HalfSampler, FullSampler
+from selection import SelectiveSampler, HalfSampler, FullSampler, SingleSampler
 
 log = utils.get_logger("DEBUG")
 
@@ -580,7 +580,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         collate_fn = _get_component_from_path(collate_fn)
 
         # TODO: make commandline arg
-        half_sampler = HalfSampler(
+        sampler = FullSampler(
             ds,
             num_replicas=1,
             rank=0,
