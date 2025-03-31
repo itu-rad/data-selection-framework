@@ -1,0 +1,13 @@
+#!/bin/bash
+#SBATCH --job-name=finetune_llama3.2-1B_FullSampler      # Job name
+#SBATCH --output=finetune_llama3.2-1B_FullSampler.out    # Output file
+#SBATCH --cpus-per-task=16                      # CPU cores per task (adjust based on your needs)
+#SBATCH --gres=gpu:v100               # Request certain GPU
+#SBATCH --time=48:00:00                         # Run for up to 2 days
+#SBATCH --partition=acltr                       # Run on GPU queue
+ 
+echo "Running on $(hostname):"
+nvidia-smi
+ 
+# Execute pipeline
+bash run_experiment.sh

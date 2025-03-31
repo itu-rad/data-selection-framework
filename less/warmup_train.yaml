@@ -18,7 +18,7 @@
 output_dir: model_cache/less/warmup_models/llama3_2_1B
 
 sampler:
-  _component_: selection.PercentageSampler
+  _component_: selection.PercentageBasedSampler
   percentage: 0.05 # How much data is selected for model warmup
 
 # Model Arguments
