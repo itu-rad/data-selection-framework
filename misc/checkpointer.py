@@ -155,7 +155,20 @@ class radTFullModelHFCheckpointer(_CheckpointerInterface):
         recipe_checkpoint: Optional[str] = None,
         resume_from_checkpoint: bool = False,
         safe_serialization: bool = True,
+        mlflow_run_id: str = "",
     ) -> None:
+
+        if mlflow_run_id:
+            # If mlflow_run_id is set, we are in a radT environment
+            # and we need to download the model from the mlflow server
+            # to the checkpoint_dir
+            import mlflow
+
+            # TODO: maybe clear folder
+
+            mlflow.artifacts.download_artifacts(
+                f"runs:/{mlflow_run_id}/model/", dst_path=checkpoint_dir
+            )
 
         self._resume_from_checkpoint = resume_from_checkpoint
         self._safe_serialization = safe_serialization
