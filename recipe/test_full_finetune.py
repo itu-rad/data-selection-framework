@@ -619,12 +619,12 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 ckpt_dict[training.OPT_KEY] = self._optimizer.state_dict()
             else:
                 ckpt_dict[training.OPT_KEY] = self._optim_ckpt_wrapper.state_dict()
-        else:  # otherwise: save to mlflow if available
-            run.pytorch.log_model(self._model, "model")
+       
 
         self._checkpointer.save_checkpoint(
             ckpt_dict,
             epoch=epoch,
+            run=run,
             intermediate_checkpoint=(epoch + 1 < self.total_epochs),
         )
 
@@ -672,6 +672,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         self._profiler.start()
         with radt.run.RADTBenchmark() as run:
+            run.autolog()
             # self.epochs_run should be non-zero when we're resuming from a checkpoint
             for curr_epoch in range(self.epochs_run, self.total_epochs):
                 # Update the sampler to ensure data is correctly shuffled across epochs
@@ -768,6 +769,10 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                                 log_dict,
                                 step=self.global_step,
                             )
+                            log_dict["epoch"] = curr_epoch
+
+                            mlflow_dict = {f"ML - {k}": v for k, v in log_dict.items()}
+                            run.log_metrics(mlflow_dict, epoch=curr_epoch)
 
                         # Reset running stats for the next step
                         running_loss = 0
