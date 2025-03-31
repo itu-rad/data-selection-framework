@@ -713,8 +713,6 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         with radt.run.RADTBenchmark() as run:
 
-            run.autolog()
-
             def log_config(run, cfg: DictConfig, directory: str) -> None:
                 for k, v in cfg.items():
                     if isinstance(v, DictConfig):
