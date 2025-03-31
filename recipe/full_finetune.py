@@ -698,6 +698,8 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         self._profiler.start()
         
         with radt.run.RADTBenchmark() as run:
+            # log sampler type to ML-flow experiment via radT 
+            run.log_param("sampler_type", type(self._sampler).__name__)
             # self.epochs_run should be non-zero when we're resuming from a checkpoint
             for curr_epoch in range(self.epochs_run, self.total_epochs):
                 # Update the sampler to ensure data is correctly shuffled across epochs
