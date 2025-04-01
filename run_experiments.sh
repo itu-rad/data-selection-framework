@@ -9,7 +9,7 @@ tune download $model_company/$model_name --ignore-patterns "original/consolidate
 echo "run_experiment.sh: Starting fine-tuning with config..."
  
 # with radt:
-python -m radt -e 137 --local --manual tune.py run recipe/test_full_finetune.py --config config/llama3_2/1b_full/train.yaml
+python -u -m radt -e 137 --local --manual tune.py run recipe/test_full_finetune.py --config config/llama3_2/1b_full/train.yaml
  
 # Evaluate base and finetuned model
 echo "run_experiment.sh: Starting evaluation of base model..."

@@ -1,7 +1,7 @@
 from selection.selectivesampler import SelectiveSampler
 import subprocess
 import os
-
+import sys
 
 class LESSBasedSampler(SelectiveSampler):
     """Sampler which utilizes LESS data selection method.
@@ -20,7 +20,7 @@ class LESSBasedSampler(SelectiveSampler):
         """Set mask to select all samples before each epoch starts"""
         # Step 1: 
         warmup_process = [
-            "python", "-m", "radt","--local","--manual","tune.py","run","recipe/test_lora_finetune.py", 
+            "python", "-u", "-m", "radt","--local","--manual", "-e", "137", "tune.py","run","recipe/test_lora_finetune.py", 
             "--config", "less/warmup_train.yaml"
         ]
         
@@ -40,6 +40,8 @@ class LESSBasedSampler(SelectiveSampler):
         except Exception as e:
             print(f"Unexpected error: {e}")
 
+        print("LESS step 1 done.. Exiting safely..")
+        sys.exit()
     
         # STEP 2:
 

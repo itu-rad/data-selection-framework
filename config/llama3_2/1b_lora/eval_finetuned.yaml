@@ -11,7 +11,7 @@ model:
 
 checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
-  checkpoint_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/lora_single_device/epoch_0/
+  checkpoint_dir: model_cache/less/warmup_models/llama3_2_1B/epoch_3
   checkpoint_files: [
     ft-model-00001-of-00001.safetensors,
   ]

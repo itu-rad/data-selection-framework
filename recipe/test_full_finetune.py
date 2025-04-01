@@ -28,7 +28,7 @@ from torchtune.training.lr_schedulers import get_lr
 
 from tqdm import tqdm
 
-from selection import SelectiveSampler, HalfSampler, FullSampler, LESSBasedSampler
+from selection import SelectiveSampler, HalfSampler, FullSampler, LESSBasedSampler, PercentageBasedSampler
 
 log = utils.get_logger("DEBUG")
 
@@ -672,6 +672,8 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         self._profiler.start()
         with radt.run.RADTBenchmark() as run:
+            run.autolog()
+            run.log_param("sampler_type", self._sampler.__class__.__name__)
             # self.epochs_run should be non-zero when we're resuming from a checkpoint
             for curr_epoch in range(self.epochs_run, self.total_epochs):
                 # Update the sampler to ensure data is correctly shuffled across epochs
