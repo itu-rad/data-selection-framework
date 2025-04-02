@@ -173,6 +173,7 @@ cython_debug/
 # Ignored folders
 /model_cache/
 /mlruns
+/hpc
 
 # radT environment init
 environment.sh
