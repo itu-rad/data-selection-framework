@@ -632,7 +632,6 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         self._checkpointer.save_checkpoint(
             ckpt_dict,
             epoch=epoch,
-            run = run,
             intermediate_checkpoint=intermediate_checkpoint,
             adapter_only=self._save_adapter_weights_only,
         )
