@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=PercentageSampler_test      # Job name
-#SBATCH --output=warmup_eval_test.out    # Output file
+#SBATCH --job-name=PercentageBasedSampler_test      # Job name
+#SBATCH --output=PercentageBasedSampler_finetune.out    # Output file
 #SBATCH --cpus-per-task=16                      # CPU cores per task (adjust based on your needs)
 #SBATCH --gres=gpu:rtx8000                     # Request certain GPU
 #SBATCH --mem=64G
@@ -18,11 +18,9 @@ nvidia-smi
 # echo "run_experiment.sh: Starting model download..."
 tune download $model_company/$model_name --ignore-patterns "original/consolidated.00.pth" --output-dir ./model_cache/downloaded_models/$model_name
  
-# # Begin finetuning with config
-echo "run_experiment.sh: Starting fine-tuning with config..."
- 
+  
 # # with radt:
-python -u -m radt -e 137 --local --manual tune.py run recipe/test_full_finetune.py --config config/llama3_2/1b_full/train.yaml
+python -u -m radt -e 137 --local --manual tune.py run less/recipe/test_full_finetune.py --config less/config/llama3_2/1b_full/train.yaml
 
 # # without radt:
 # python tune.py run recipe/test_full_finetune.py --config config/llama3_2/1b_full/train.yaml
@@ -30,5 +28,5 @@ python -u -m radt -e 137 --local --manual tune.py run recipe/test_full_finetune.
 # Evaluate base and finetuned model, remember to use last epoch in config
 echo "run_experiment.sh: Starting evaluation of model(s)..."
 # tune run recipe/eval.py --config config/llama3_2/1b_full/eval_base.yaml
-tune run recipe/eval.py --config config/llama3_2/1b_lora/eval_finetuned.yaml
+tune run less/recipe/eval.py --config less/config/llama3_2/1b_lora/eval_finetuned.yaml
 
