@@ -20,8 +20,8 @@ class LESSBasedSampler(SelectiveSampler):
         """Set mask to select all samples before each epoch starts"""
         # Step 1: 
         warmup_process = [
-            "python", "-m", "radt","--local","--manual","tune.py","run","recipe/test_lora_finetune.py", 
-            "--config", "less/warmup_train.yaml"
+            "python", "-m", "radt","--local","--manual","tune.py","run","less/recipe/test_lora_finetune.py", 
+            "--config", "less/config/llama3_2/warmup_train.yaml"
         ]
         
         
