@@ -597,8 +597,6 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                     training.MAX_STEPS_KEY: self.max_steps_per_epoch,
                 }
             )
-        else:  # otherwise: save to mlflow if available
-            run.pytorch.log_model(self._model, "model")
 
         adapter_state_dict = get_adapter_state_dict(self._model.state_dict())
         ckpt_dict.update({training.ADAPTER_KEY: adapter_state_dict})
@@ -632,6 +630,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         self._checkpointer.save_checkpoint(
             ckpt_dict,
             epoch=epoch,
+            run = run,
             intermediate_checkpoint=intermediate_checkpoint,
             adapter_only=self._save_adapter_weights_only,
         )
@@ -766,6 +765,9 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                                     log_dict,
                                     step=self.global_step,
                                 )
+                                log_dict["epoch"] = curr_epoch
+                                mlflow_dict = {f"ML - {k}": v for k, v in log_dict.items()}
+                                run.log_metrics(mlflow_dict, epoch=curr_epoch)
 
                             # Reset running stats for the next step
                             running_loss = 0
