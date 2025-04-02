@@ -9,7 +9,7 @@ class LESSBasedSampler(SelectiveSampler):
 
     """ LESS utilizes 5% of data samples for warmup training. This can be change for experimentation"""
 
-    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True, seed=0, percentage=0.05):
+    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True, seed=0):
       super().__init__(
           dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed
       )
