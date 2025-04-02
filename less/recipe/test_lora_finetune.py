@@ -36,7 +36,9 @@ from torchtune.training import DummyProfiler, PROFILER_KEY
 
 from tqdm import tqdm
 
-from selection import SelectiveSampler, HalfSampler, FullSampler, PercentageBasedSampler
+from selection import *
+
+from misc.instantiate_safe import instantiate_safe
 
 log = utils.get_logger("DEBUG")
 
@@ -308,6 +310,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         collate_name = cfg.get("collate_fn", "torchtune.data.padded_collate_sft")
         self._sampler, self._dataloader = self._setup_data(
             cfg_dataset=cfg.dataset,
+            cfg_sampler=cfg.sampler,
             shuffle=cfg.shuffle,
             batch_size=cfg.batch_size,
             collate_fn=collate_name,
@@ -517,6 +520,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
     def _setup_data(
         self,
         cfg_dataset: DictConfig,
+        cfg_sampler: DictConfig,
         shuffle: bool,
         batch_size: int,
         collate_fn: str,
@@ -542,13 +546,20 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(collate_fn)
 
-        # TODO: make commandline arg
-        sampler = PercentageBasedSampler(
-            ds,
+        # Check that component is included and set correctly
+        if cfg_sampler.get("_component_", None) is None:
+            cfg_sampler["_component_"] = "selection.FullSampler"
+
+        sampler = instantiate_safe(
+            # Kwargs in ABC
+            config=cfg_sampler,
+            dataset=ds,
             num_replicas=1,
             rank=0,
             shuffle=shuffle,
             seed=0,
+            # Optional kwargs
+            loss_fn=self._loss_fn,
         )
 
         dataloader = DataLoader(

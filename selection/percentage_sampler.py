@@ -4,7 +4,7 @@ from selection.selectivesampler import SelectiveSampler
 class PercentageBasedSampler(SelectiveSampler):
     """Example implementation of SelectiveSampler that uses all of the samples."""
 
-    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True, seed=0, percentage=0.05):
+    def __init__(self, dataset, percentage, num_replicas=None, rank=None, shuffle=True, seed=0):
        super().__init__(
            dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed
        )
