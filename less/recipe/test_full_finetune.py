@@ -619,12 +619,12 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 ckpt_dict[training.OPT_KEY] = self._optimizer.state_dict()
             else:
                 ckpt_dict[training.OPT_KEY] = self._optim_ckpt_wrapper.state_dict()
-        
+        else:  # otherwise: save to mlflow if available
+            run.pytorch.log_model(self._model, "model")
 
         self._checkpointer.save_checkpoint(
             ckpt_dict,
             epoch=epoch,
-            run = run,
             intermediate_checkpoint=(epoch + 1 < self.total_epochs),
         )
 
@@ -652,7 +652,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         return loss
 
-    def train(self) -> None:
+    def train(self, cfg: DictConfig) -> None:
         """
         The core training loop. Supports training on subsets of the dataset using the
         ``max_steps_per_epoch``.
@@ -672,8 +672,20 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         self._profiler.start()
         with radt.run.RADTBenchmark() as run:
+            
             run.autolog()
-            run.log_param("sampler_type", self._sampler.__class__.__name__)
+            def log_config(run, cfg: DictConfig, directory: str) -> None:
+                for k, v in cfg.items():
+                    if isinstance(v, DictConfig):
+                        log_config(run, v, f"{directory}.{k}")
+                    else:
+                        run.log_param(f"{directory}.{k}", v)
+
+            # Log config
+            recipe_location = sys.argv[sys.argv.index("--config") + 1]
+            run.log_artifact(recipe_location, "config")
+            log_config(run, cfg, "config")
+            
             # self.epochs_run should be non-zero when we're resuming from a checkpoint
             for curr_epoch in range(self.epochs_run, self.total_epochs):
                 # Update the sampler to ensure data is correctly shuffled across epochs
@@ -821,7 +833,7 @@ def recipe_main(cfg: DictConfig) -> None:
     print("Starting test_full_finetune setup()")
     recipe.setup(cfg=cfg)
     print("starting test_full_finetune train()")
-    recipe.train()
+    recipe.train(cfg=cfg)
     print("starting test_full_finetune cleanup()")
     recipe.cleanup()
 
