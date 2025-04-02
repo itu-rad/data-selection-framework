@@ -21,7 +21,7 @@ class LESSBasedSampler(SelectiveSampler):
         # Step 1: 
         warmup_process = [
             "python", "-u", "-m", "radt","--local","--manual", "-e", "137", "tune.py","run","recipe/test_lora_finetune.py", 
-            "--config", "less/warmup_train.yaml"
+            "--config", "less/config/llama3_2/warmup_train.yaml"
         ]
         
         
