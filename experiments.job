@@ -12,8 +12,8 @@ nvidia-smi
  
 # Execute pipeline
 # Download model
-# model_company="meta-llama"
-# model_name="Llama-3.2-1B-Instruct"
+model_company="meta-llama"
+model_name="Llama-3.2-1B-Instruct"
  
 # echo "run_experiment.sh: Starting model download..."
 tune download $model_company/$model_name --ignore-patterns "original/consolidated.00.pth" --output-dir ./model_cache/downloaded_models/$model_name
