@@ -10,6 +10,7 @@
 import gc
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Union
 
@@ -166,17 +167,7 @@ class radTFullModelHFCheckpointer(_CheckpointerInterface):
     ) -> None:
 
         if mlflow_run_id:
-            # If mlflow_run_id is set, we are in a radT environment
-            # and we need to download the model from the mlflow server
-            # to the checkpoint_dir
-
-            # TODO: maybe clear folder
-            if os.path.exists(checkpoint_dir):
-                logger.info(f"Checkpoint dir {checkpoint_dir} already exists.")
-
-            mlflow.artifacts.download_artifacts(
-                f"runs:/{mlflow_run_id}/model/", dst_path=checkpoint_dir
-            )
+            self.download_from_mlflow(mlflow_run_id, checkpoint_dir)
 
         self._resume_from_checkpoint = resume_from_checkpoint
         self._safe_serialization = safe_serialization
@@ -241,6 +232,45 @@ class radTFullModelHFCheckpointer(_CheckpointerInterface):
                 f"\n\trecipe_checkpoint: {self._recipe_checkpoint}"
                 f"\n\tadapter_checkpoint: {self._adapter_checkpoint}"
             )
+
+    def download_from_mlflow(self, mlflow_run_id: str, checkpoint_dir: str) -> None:
+        """
+        Download the model from mlflow to the checkpoint_dir
+        """
+
+        # Check if run already downloaded
+        if os.path.exists(checkpoint_dir):
+            logger.info(f"Checkpoint dir {checkpoint_dir} already exists.")
+
+            try:
+                with open(os.path.join(checkpoint_dir, "source"), "r") as f:
+                    read_run_id = f.read()
+
+                if read_run_id.strip() == mlflow_run_id.strip():
+                    logger.info(
+                        f"Checkpoint dir {checkpoint_dir} already contains the run_id {read_run_id}"
+                    )
+                    return
+                else:
+                    # remove contents of checkpoint_dir
+                    logger.info(
+                        f"Removing contents of {checkpoint_dir} to replace the old model."
+                    )
+
+            except FileNotFoundError as e:
+                pass
+
+        # Remove the previous model if it exists
+        shutil.rmtree(checkpoint_dir)
+
+        # Download the model from mlflow
+        mlflow.artifacts.download_artifacts(
+            f"runs:/{mlflow_run_id}/model/", dst_path=checkpoint_dir
+        )
+
+        # Open "source" file in checkpoint_dir and write run_id to it
+        with open(os.path.join(checkpoint_dir, "source"), "w") as f:
+            f.write(mlflow_run_id)
 
     def load_checkpoint(self) -> Dict[str, Any]:
         """
