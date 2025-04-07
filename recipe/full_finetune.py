@@ -17,11 +17,11 @@ from omegaconf import DictConfig, ListConfig
 
 from torch import nn
 from torch.optim import Optimizer
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader
 
 from misc.indexed_ds import IndexedWrapperDataset
 from misc.collate import collate_with_sample_id
-from selection.loss_sampler import LossBasedSampler
+from selection.loss_sampler import LossSampler
 from torchtune import config, modules, training, utils
 from torchtune.config._utils import _get_component_from_path
 from torchtune.data import padded_collate_packed
@@ -33,6 +33,7 @@ from torchtune.training.lr_schedulers import get_lr
 from tqdm import tqdm
 
 from selection import SelectiveSampler, HalfSampler, FullSampler
+from misc.instantiate_safe import instantiate_safe
 
 log = utils.get_logger("DEBUG")
 
@@ -132,6 +133,8 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 "full fp16 training is not supported with this recipe. Please use bf16 or fp32 instead."
             )
 
+        print(cfg)
+        print(dir(cfg))
         # logging attributes
         self._output_dir = cfg.output_dir
         self._log_every_n_steps = cfg.get("log_every_n_steps", 1)
@@ -308,6 +311,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         collate_name = cfg.get("collate_fn", "torchtune.data.padded_collate_sft")
         self._sampler, self._dataloader = self._setup_data(
             cfg_dataset=cfg.dataset,
+            cfg_sampler=cfg.sampler,
             shuffle=cfg.shuffle,
             batch_size=cfg.batch_size,
             collate_fn=collate_name,
@@ -349,7 +353,6 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             and self.max_steps_per_epoch < self._steps_per_epoch
         ):
             self._steps_per_epoch = self.max_steps_per_epoch
-
 
     def _setup_profiler(
         self, cfg_profiler: Optional[DictConfig] = None
@@ -554,6 +557,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
     def _setup_data(
         self,
         cfg_dataset: DictConfig,
+        cfg_sampler: DictConfig,
         shuffle: bool,
         batch_size: int,
         collate_fn: str,
@@ -563,6 +567,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         SelectiveSampler with Map-style Datasets which fit into memory.
         Other samplers, iterable datasets and streaming datasets are not supported.
         """
+
         if isinstance(cfg_dataset, ListConfig):
             datasets = [
                 config.instantiate(single_cfg_dataset, self._tokenizer)
@@ -574,30 +579,37 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             ds = config.instantiate(cfg_dataset, self._tokenizer)
             packed = cfg_dataset.get("packed", False)
 
+        # Check that component is included and set correctly
+        if cfg_sampler.get("_component_", None) is None:
+            cfg_sampler["_component_"] = "selection.FullSampler"
+
+        sampler = instantiate_safe(
+            # Kwargs in ABC
+            cfg_sampler,
+            dataset=ds,
+            num_replicas=1,
+            rank=0,
+            shuffle=shuffle,
+            seed=0,
+            # Optional kwargs
+            loss_fn=self._loss_fn,
+        )
+
         # Instantiate collate_fn
         if "left_pad_sequence" in collate_fn:
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(collate_fn)
 
-        # TODO: make commandline arg
-        half_sampler = HalfSampler(
-            ds,
-            num_replicas=1,
-            rank=0,
-            shuffle=shuffle,
-            seed=0,
-        )
-
-        loss_sampler = LossBasedSampler(ds, loss_fn=self._loss_fn, num_replicas=1, rank=0, shuffle=shuffle, seed=0, sampling_ratio=cfg_dataset.get("sampling_ratio", 0.5))
-
-        sampler = loss_sampler
-
         # Default torchtune collation code
-        collate_fn = partial(
-                    collate_fn,
-                    padding_idx=self._tokenizer.pad_id,
-                    ignore_idx=self._loss_fn.ignore_index,
-                    ) if not packed else padded_collate_packed 
+        collate_fn = (
+            partial(
+                collate_fn,
+                padding_idx=self._tokenizer.pad_id,
+                ignore_idx=self._loss_fn.ignore_index,
+            )
+            if not packed
+            else padded_collate_packed
+        )
 
         # Ensure we keep the sample id
         collate_fn = partial(collate_with_sample_id, base_collate_fn=collate_fn)
@@ -606,12 +618,11 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             dataset=IndexedWrapperDataset(ds),
             batch_size=batch_size,
             sampler=sampler,
-            drop_last=True, # dropping last avoids shape issues with compile + flex attention
-            collate_fn=collate_fn
+            drop_last=True,  # dropping last avoids shape issues with compile + flex attention
+            collate_fn=collate_fn,
         )
 
         log.info("Dataset and SelectiveSampler are initialized.")
-
         return sampler, dataloader
 
     def save_checkpoint(self, run, epoch: int) -> None:
@@ -634,16 +645,17 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 ckpt_dict[training.OPT_KEY] = self._optimizer.state_dict()
             else:
                 ckpt_dict[training.OPT_KEY] = self._optim_ckpt_wrapper.state_dict()
-        else:  # otherwise: save to mlflow if available
-            run.pytorch.log_model(self._model, "model")
 
         self._checkpointer.save_checkpoint(
             ckpt_dict,
             epoch=epoch,
+            run=run,
             intermediate_checkpoint=(epoch + 1 < self.total_epochs),
         )
-    
-    def _forward_pass(self, batch: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+
+    def _forward_pass(
+        self, batch: Dict[str, torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass without loss calculation.
 
@@ -656,7 +668,9 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         with self.activations_handling_ctx:
             logits = self._model(**batch)
         batch_size = labels.size(0)
-        shifted_labels = torch.hstack((labels[..., 1:], self.ignore_labels_cache[:batch_size]))
+        shifted_labels = torch.hstack(
+            (labels[..., 1:], self.ignore_labels_cache[:batch_size])
+        )
         batch["labels"] = labels  # restore
         batch["sample_ids"] = sample_ids
         return logits, shifted_labels
@@ -677,7 +691,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         return loss
 
-    def train(self) -> None:
+    def train(self, cfg: DictConfig) -> None:
         """
         The core training loop. Supports training on subsets of the dataset using the
         ``max_steps_per_epoch``.
@@ -696,10 +710,21 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         num_tokens = 0
 
         self._profiler.start()
-        
+
         with radt.run.RADTBenchmark() as run:
-            # log sampler type to ML-flow experiment via radT 
-            run.log_param("sampler_type", type(self._sampler).__name__)
+
+            def log_config(run, cfg: DictConfig, directory: str) -> None:
+                for k, v in cfg.items():
+                    if isinstance(v, DictConfig):
+                        log_config(run, v, f"{directory}.{k}")
+                    else:
+                        run.log_param(f"{directory}.{k}", v)
+
+            # Log config
+            recipe_location = sys.argv[sys.argv.index("--config") + 1]
+            run.log_artifact(recipe_location, "config")
+            log_config(run, cfg, "config")
+
             # self.epochs_run should be non-zero when we're resuming from a checkpoint
             for curr_epoch in range(self.epochs_run, self.total_epochs):
                 # Update the sampler to ensure data is correctly shuffled across epochs
@@ -708,12 +733,18 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
                 self._sampler.pre_epoch()
                 # ----- First Pass: Scoring Phase -----
-                utils.get_logger("DEBUG").info("Starting scoring pass for epoch %d", curr_epoch)
+                utils.get_logger("DEBUG").info(
+                    "Starting scoring pass for epoch %d", curr_epoch
+                )
                 pbar = tqdm(desc="Scoring", total=self._steps_per_epoch)
                 for idx, batch in enumerate(self._dataloader):
                     pbar.update(1)
                     utils.batch_to_device(batch, self._device)
-                    no_grad_mgr = torch.inference_mode() if self._sampler.no_grad_scoring else contextlib.nullcontext()
+                    no_grad_mgr = (
+                        torch.inference_mode()
+                        if self._sampler.no_grad_scoring
+                        else contextlib.nullcontext()
+                    )
                     with no_grad_mgr:
                         logits, shifted_labels = self._forward_pass(batch)
                         sample_ids = batch["sample_ids"].tolist()
@@ -730,7 +761,9 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                     num_training_steps=self.total_epochs * self._steps_per_epoch,
                     last_epoch=self.global_step - 1,
                 )
-                utils.get_logger("DEBUG").info("Scoring complete; selected %d samples", sum(self._sampler.mask))
+                utils.get_logger("DEBUG").info(
+                    "Scoring complete; selected %d samples", sum(self._sampler.mask)
+                )
 
                 # ----- Second pass: Training phase (uses updated sampler mask) -----
                 pbar = tqdm(desc="Training", total=self._steps_per_epoch)
@@ -822,6 +855,10 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                                 log_dict,
                                 step=self.global_step,
                             )
+                            log_dict["epoch"] = curr_epoch
+
+                            mlflow_dict = {f"ML - {k}": v for k, v in log_dict.items()}
+                            run.log_metrics(mlflow_dict, epoch=curr_epoch)
 
                         # Reset running stats for the next step
                         running_loss = 0
@@ -867,7 +904,7 @@ def recipe_main(cfg: DictConfig) -> None:
     config.log_config(recipe_name="FullFinetuneRecipeSingleDevice", cfg=cfg)
     recipe = FullFinetuneRecipeSingleDevice(cfg=cfg)
     recipe.setup(cfg=cfg)
-    recipe.train()
+    recipe.train(cfg=cfg)
     recipe.cleanup()
 
 

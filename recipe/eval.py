@@ -4,11 +4,13 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import radt
 import sys
 import time
 
 from typing import Dict, List, Tuple, Union
 
+import pandas as pd
 import PIL
 
 import torch
@@ -17,7 +19,6 @@ from lm_eval.evaluator import evaluate
 from lm_eval.models.hf_vlms import HFMultimodalLM
 from lm_eval.models.huggingface import HFLM
 from lm_eval.tasks import get_task_dict, TaskManager
-from lm_eval.utils import make_table
 from omegaconf import DictConfig
 
 from torchtune import config, training, utils
@@ -530,28 +531,55 @@ class EleutherEvalRecipe(EvalRecipeInterface):
             enable_kv_cache=self.enable_kv_cache,
         )
 
-    def evaluate(self) -> None:
+    def evaluate(self, cfg) -> None:
         # Initialize tasks for the harness
         task_manager = TaskManager(include_path=self.include_path)
         task_dict = get_task_dict(self.tasks, task_manager)
 
-        # Run evaluation
-        t0 = time.time()
-        self.logger.info(f"Running evaluation on the following tasks: {self.tasks}")
-        output = evaluate(
-            self.eleuther_model_wrapper,
-            task_dict,
-            limit=self.limit,
-        )
-        t1 = time.time() - t0
+        with radt.run.RADTBenchmark() as run:
 
-        # Log metrics
-        self.logger.info(f"Eval completed in {t1:.02f} seconds.")
-        self.logger.info(
-            f"Max memory allocated: {torch.cuda.max_memory_allocated() / 1e9:.02f} GB"
-        )
-        formatted_output = make_table(output)
-        self.logger.info(f"\n\n{formatted_output}\n")
+            def log_config(run, cfg: DictConfig, directory: str) -> None:
+                for k, v in cfg.items():
+                    if isinstance(v, DictConfig):
+                        log_config(run, v, f"{directory}.{k}")
+                    else:
+                        run.log_param(f"{directory}.{k}", v)
+
+            # Log config
+            recipe_location = sys.argv[sys.argv.index("--config") + 1]
+            run.log_artifact(recipe_location, "config")
+            log_config(run, cfg, "config")
+
+            # Run evaluation
+            t0 = time.time()
+            self.logger.info(f"Running evaluation on the following tasks: {self.tasks}")
+            output = evaluate(
+                self.eleuther_model_wrapper,
+                task_dict,
+                limit=self.limit,
+            )
+            t1 = time.time() - t0
+
+            # Log metrics
+            self.logger.info(f"Eval completed in {t1:.02f} seconds.")
+            self.logger.info(
+                f"Max memory allocated: {torch.cuda.max_memory_allocated() / 1e9:.02f} GB"
+            )
+
+            # TODO: perhaps enable table logging sometime
+
+            # print(output.keys())
+            # run.log_table(
+            #     output["samples"]["data"],
+            #     "eval_results.json",
+            # )
+            formatted_output, table = make_table(output)
+            print(table)
+            run.log_table(
+                table,
+                "eval_results.json",
+            )
+            self.logger.info(f"\n\n{formatted_output}\n")
 
 
 @config.parse
@@ -560,7 +588,99 @@ def recipe_main(cfg: DictConfig) -> None:
     config.log_config(recipe_name="EleutherEvalRecipe", cfg=cfg)
     recipe = EleutherEvalRecipe(cfg=cfg)
     recipe.setup(cfg=cfg)
-    recipe.evaluate()
+    recipe.evaluate(cfg=cfg)
+
+
+# from: https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/utils.py
+HIGHER_IS_BETTER_SYMBOLS = {
+    True: "↑",
+    False: "↓",
+}
+
+
+def make_table(result_dict, column: str = "results", sort_results: bool = False):
+    """Generate table of results."""
+    from pytablewriter import LatexTableWriter, MarkdownTableWriter
+
+    if column == "results":
+        column_name = "Tasks"
+    elif column == "groups":
+        column_name = "Groups"
+
+    all_headers = [
+        column_name,
+        "Version",
+        "Filter",
+        "n-shot",
+        "Metric",
+        "",
+        "Value",
+        "",
+        "Stderr",
+    ]
+
+    panda_headers = [
+        column_name,
+        "Version",
+        "Filter",
+        "n-shot",
+        "Metric",
+        "Value",
+        "Stderr",
+    ]
+
+    md_writer = MarkdownTableWriter()
+    latex_writer = LatexTableWriter()
+    md_writer.headers = all_headers
+    latex_writer.headers = all_headers
+
+    values = []
+
+    keys = result_dict[column].keys()
+    if sort_results:
+        # sort entries alphabetically by task or group name.
+        # NOTE: we default here to false, because order matters for multi-level table printing a la mmlu.
+        # sorting here would mess that up
+        keys = sorted(keys)
+    for k in keys:
+        dic = result_dict[column][k]
+        version = result_dict["versions"].get(k, "    N/A")
+        n = str(result_dict.get("n-shot", " ").get(k, " "))
+        higher_is_better = result_dict.get("higher_is_better", {}).get(k, {})
+
+        if "alias" in dic:
+            k = dic.pop("alias")
+
+        metric_items = dic.items()
+        metric_items = sorted(metric_items)
+
+        for (mf), v in metric_items:
+            m, _, f = mf.partition(",")
+            if m.endswith("_stderr"):
+                continue
+
+            hib = HIGHER_IS_BETTER_SYMBOLS.get(higher_is_better.get(m), "")
+
+            v = "%.4f" % v if isinstance(v, float) else v
+
+            if m + "_stderr" + "," + f in dic:
+                se = dic[m + "_stderr" + "," + f]
+                se = "   N/A" if se == "N/A" else "%.4f" % se
+                values.append([k, version, f, n, m, hib, v, "±", se])
+            else:
+                values.append([k, version, f, n, m, hib, v, "", ""])
+            k = ""
+            version = ""
+
+    md_writer.value_matrix = values
+    latex_writer.value_matrix = values
+    table = pd.DataFrame(values, columns=all_headers)
+    table = table.loc[:, panda_headers]
+
+    # todo: make latex table look good
+    # print(latex_writer.dumps())
+
+    return md_writer.dumps(), table
 
 
 if __name__ == "__main__":

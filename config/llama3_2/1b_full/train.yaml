@@ -21,6 +21,11 @@
 
 output_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/full_single_device # Change it to your preference.
 
+sampler:
+  _component_: selection.LossSampler
+  sampling_ratio: 0.1
+
+
 # Tokenizer
 tokenizer:
   _component_: torchtune.models.llama3.llama3_tokenizer
@@ -39,7 +44,7 @@ model:
   _component_: torchtune.models.llama3_2.llama3_2_1b
 
 checkpointer:
-  _component_: torchtune.training.FullModelHFCheckpointer
+  _component_: misc.checkpointer.radTFullModelHFCheckpointer
   checkpoint_dir: model_cache/downloaded_models/Llama-3.2-1B-Instruct/
   checkpoint_files: [
     model.safetensors

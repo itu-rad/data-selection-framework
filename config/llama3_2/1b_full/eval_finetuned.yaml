@@ -10,13 +10,14 @@ model:
   _component_: torchtune.models.llama3_2.llama3_2_1b
 
 checkpointer:
-  _component_: torchtune.training.FullModelHFCheckpointer
+  _component_: misc.checkpointer.radTFullModelHFCheckpointer
   checkpoint_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/full_single_device/epoch_0/
   checkpoint_files: [
     ft-model-00001-of-00001.safetensors,
   ]
   output_dir: ${output_dir}
   model_type: LLAMA3_2
+  mlflow_run_id: f93ace948162492aa966b42aff926cb5
 
 # Tokenizer
 tokenizer:
