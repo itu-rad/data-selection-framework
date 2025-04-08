@@ -10,6 +10,7 @@
 import gc
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Union
 
@@ -38,6 +39,13 @@ from torchtune.training.checkpointing._utils import (
 )
 from torchtune.utils._logging import get_logger, log_rank_zero
 
+
+import mlflow
+from mlflow.utils.file_utils import get_total_file_size
+from mlflow.models.model import ModelInfo
+from mlflow.tracking._tracking_service.utils import _resolve_tracking_uri
+from mlflow.models.model import MLMODEL_FILE_NAME
+from mlflow.exceptions import MlflowException
 from mlflow.models import Model
 from mlflow.tracking._model_registry import DEFAULT_AWAIT_MAX_SLEEP_SECONDS
 
@@ -155,7 +163,11 @@ class radTFullModelHFCheckpointer(_CheckpointerInterface):
         recipe_checkpoint: Optional[str] = None,
         resume_from_checkpoint: bool = False,
         safe_serialization: bool = True,
+        mlflow_run_id: str = "",
     ) -> None:
+
+        if mlflow_run_id:
+            self.download_from_mlflow(mlflow_run_id, checkpoint_dir)
 
         self._resume_from_checkpoint = resume_from_checkpoint
         self._safe_serialization = safe_serialization
@@ -220,6 +232,45 @@ class radTFullModelHFCheckpointer(_CheckpointerInterface):
                 f"\n\trecipe_checkpoint: {self._recipe_checkpoint}"
                 f"\n\tadapter_checkpoint: {self._adapter_checkpoint}"
             )
+
+    def download_from_mlflow(self, mlflow_run_id: str, checkpoint_dir: str) -> None:
+        """
+        Download the model from mlflow to the checkpoint_dir
+        """
+
+        # Check if run already downloaded
+        if os.path.exists(checkpoint_dir):
+            logger.info(f"Checkpoint dir {checkpoint_dir} already exists.")
+
+            try:
+                with open(os.path.join(checkpoint_dir, "source"), "r") as f:
+                    read_run_id = f.read()
+
+                if read_run_id.strip() == mlflow_run_id.strip():
+                    logger.info(
+                        f"Checkpoint dir {checkpoint_dir} already contains the run_id {read_run_id}"
+                    )
+                    return
+                else:
+                    # remove contents of checkpoint_dir
+                    logger.info(
+                        f"Removing contents of {checkpoint_dir} to replace the old model."
+                    )
+
+            except FileNotFoundError as e:
+                pass
+
+        # Remove the previous model if it exists
+        shutil.rmtree(checkpoint_dir)
+
+        # Download the model from mlflow
+        mlflow.artifacts.download_artifacts(
+            f"runs:/{mlflow_run_id}/model/", dst_path=checkpoint_dir
+        )
+
+        # Open "source" file in checkpoint_dir and write run_id to it
+        with open(os.path.join(checkpoint_dir, "source"), "w") as f:
+            f.write(mlflow_run_id)
 
     def load_checkpoint(self) -> Dict[str, Any]:
         """
@@ -645,47 +696,12 @@ class radTFullModelHFCheckpointer(_CheckpointerInterface):
                     "You can now use this checkpoint for further training or inference."
                 )
 
-        print("\nend hit!\n")
         if "RADT_MAX_EPOCH" in os.environ:  # radT blocker
-            print("\nmax epoch hit!\n")
             output_path = Path.joinpath(self._output_dir, f"epoch_{epoch}")
             log(
                 artifact_path="model",
                 data_path=output_path,
             )
-        # Model.log(
-        #         artifact_path="model",
-        #         flavor=mlflow.pyfunc,
-        #         loader_module=None,
-        #         data_path=output_path,
-        #         code_path=None,  # deprecated
-        #         code_paths=None,
-        #         infer_code_paths=False,
-        #         conda_env=None,
-        #         python_model=None,
-        #         artifacts=None,
-        #         registered_model_name=None,
-        #         signature=None,
-        #         input_example=None,
-        #         await_registration_for=DEFAULT_AWAIT_MAX_SLEEP_SECONDS,
-        #         pip_requirements=None,
-        #         extra_pip_requirements=None,
-        #         metadata=None,
-        #         model_config=None,
-        #         example_no_conversion=None,
-        #         streamable=None,
-        #         resources=None,
-        #         auth_policy=None,
-        #         prompts=None,
-        #     )
-
-
-from mlflow.utils.file_utils import get_total_file_size
-from mlflow.models.model import ModelInfo
-from mlflow.tracking._tracking_service.utils import _resolve_tracking_uri
-from mlflow.models.model import MLMODEL_FILE_NAME
-from mlflow.exceptions import MlflowException
-import mlflow
 
 
 def log(
@@ -729,9 +745,7 @@ def log(
         metadata of the logged model.
     """
 
-    print("\nlog start!\n")
     # Only one of Auth policy and resources should be defined
-
     mlflow_model = Model()
     if size := get_total_file_size(data_path):
         mlflow_model.model_size_bytes = size
@@ -769,5 +783,4 @@ def log(
     if registered_model is not None:
         model_info.registered_model_version = registered_model.version
 
-    print("\nlog end!\n")
     return model_info

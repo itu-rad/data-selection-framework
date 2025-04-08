@@ -1,4 +1,4 @@
-# Modified from torchtune.config.instantiate
+# Modified from torchtune.config.instantiate torchtune 0.5.0
 
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
