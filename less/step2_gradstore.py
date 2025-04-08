@@ -845,11 +845,9 @@ def recipe_main(cfg: DictConfig) -> None:
     """
     config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
     recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
-    print("Starting test_lora_finetune setup()")
     recipe.setup(cfg=cfg)
-    print("starting test_lora_finetune train()")
-    recipe.train(cfg=cfg)
-    print("starting test_lora_finetune cleanup()")
+    # recipe.train(cfg=cfg)
+    # Here the recipe must build the gradstore instead of training.
     recipe.cleanup()
 
 

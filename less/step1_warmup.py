@@ -4,8 +4,14 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import radt
+# import radt
 import sys
+import os
+# Add the parent directory to sys.path so Python can find 'selection'
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from torchtune._cli.run import Run  # Import the Run subcommand
+
 import time
 
 from functools import partial
@@ -14,7 +20,7 @@ from warnings import warn
 
 import torch
 import torchtune.modules.common_utils as common_utils
-from omegaconf import DictConfig, ListConfig
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from torch import nn
 from torch.optim import Optimizer
@@ -646,7 +652,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         self._checkpointer.save_checkpoint(
             ckpt_dict,
             epoch=epoch,
-            run=run,
+            # run=run,
             intermediate_checkpoint=intermediate_checkpoint,
             adapter_only=self._save_adapter_weights_only,
         )
@@ -691,20 +697,19 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         num_tokens = 0
 
         with self._profiler as prof:
-            with radt.run.RADTBenchmark() as run:
+            # with radt.run.RADTBenchmark() as run:
                 
-                run.autolog()
-                def log_config(run, cfg: DictConfig, directory: str) -> None:
-                    for k, v in cfg.items():
-                        if isinstance(v, DictConfig):
-                            log_config(run, v, f"{directory}.{k}")
-                        else:
-                            run.log_param(f"{directory}.{k}", v)
+                # def log_config(run, cfg: DictConfig, directory: str) -> None:
+                #     for k, v in cfg.items():
+                #         if isinstance(v, DictConfig):
+                #             log_config(run, v, f"{directory}.{k}")
+                #         else:
+                #             run.log_param(f"{directory}.{k}", v)
 
-                # Log config
-                recipe_location = sys.argv[sys.argv.index("--config") + 1]
-                run.log_artifact(recipe_location, "config")
-                log_config(run, cfg, "config")                
+                # # Log config
+                # recipe_location = sys.argv[sys.argv.index("--config") + 1]
+                # run.log_artifact(recipe_location, "config")
+                # log_config(run, cfg, "config")                
                 
                 # self.epochs_run should be non-zero when we're resuming from a checkpoint
                 for curr_epoch in range(self.epochs_run, self.total_epochs):
@@ -793,9 +798,9 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                                     log_dict,
                                     step=self.global_step,
                                 )
-                                log_dict["epoch"] = curr_epoch
-                                mlflow_dict = {f"ML - {k}": v for k, v in log_dict.items()}
-                                run.log_metrics(mlflow_dict, epoch=curr_epoch)
+                                # log_dict["epoch"] = curr_epoch
+                                # mlflow_dict = {f"ML - {k}": v for k, v in log_dict.items()}
+                                # run.log_metrics(mlflow_dict, epoch=curr_epoch)
 
                             # Reset running stats for the next step
                             running_loss = 0
@@ -823,7 +828,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                     self.epochs_run += 1
                     start_save_checkpoint = time.perf_counter()
                     log.info("Starting checkpoint save...")
-                    self.save_checkpoint(run=run, epoch=curr_epoch)
+                    # self.save_checkpoint(run=run, epoch=curr_epoch)
+                    self.save_checkpoint(epoch=curr_epoch)
                     log.info(
                         "Checkpoint saved in {:.2f} seconds.".format(
                             time.perf_counter() - start_save_checkpoint
@@ -834,8 +840,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         self._metric_logger.close()
 
 
-@config.parse
-def recipe_main(cfg: DictConfig) -> None:
+def warmup(cfg: DictConfig = "less/config/llama3_2/warmup_train.yaml") -> None:
     """
     Entry point for the recipe.
 
@@ -843,15 +848,13 @@ def recipe_main(cfg: DictConfig) -> None:
         - Parameters specified in config (see available configs through ``tune ls``)
         - Overwritten by arguments from the command-line
     """
+    cfg = OmegaConf.load(cfg)
     config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
     recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
-    print("Starting test_lora_finetune setup()")
     recipe.setup(cfg=cfg)
-    print("starting test_lora_finetune train()")
     recipe.train(cfg=cfg)
-    print("starting test_lora_finetune cleanup()")
     recipe.cleanup()
 
 
 if __name__ == "__main__":
-    sys.exit(recipe_main())
+    sys.exit(warmup())
