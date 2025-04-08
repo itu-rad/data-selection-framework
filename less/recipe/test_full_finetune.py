@@ -16,7 +16,7 @@ from omegaconf import DictConfig, ListConfig
 
 from torch import nn
 from torch.optim import Optimizer
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader
 
 from torchtune import config, modules, training, utils
 from torchtune.config._utils import _get_component_from_path
@@ -129,7 +129,9 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             raise ValueError(
                 "full fp16 training is not supported with this recipe. Please use bf16 or fp32 instead."
             )
-
+        
+        print(cfg)
+        print(dir(cfg))
         # logging attributes
         self._output_dir = cfg.output_dir
         self._log_every_n_steps = cfg.get("log_every_n_steps", 1)
@@ -631,12 +633,11 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 ckpt_dict[training.OPT_KEY] = self._optimizer.state_dict()
             else:
                 ckpt_dict[training.OPT_KEY] = self._optim_ckpt_wrapper.state_dict()
-        else:  # otherwise: save to mlflow if available
-            run.pytorch.log_model(self._model, "model")
 
         self._checkpointer.save_checkpoint(
             ckpt_dict,
             epoch=epoch,
+            run=run,
             intermediate_checkpoint=(epoch + 1 < self.total_epochs),
         )
 
@@ -685,7 +686,6 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         self._profiler.start()
         with radt.run.RADTBenchmark() as run:
             
-            run.autolog()
             def log_config(run, cfg: DictConfig, directory: str) -> None:
                 for k, v in cfg.items():
                     if isinstance(v, DictConfig):
