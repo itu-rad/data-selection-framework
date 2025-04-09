@@ -2,6 +2,7 @@ from selection.selectivesampler import SelectiveSampler
 import subprocess
 import os
 import sys
+from less.step1_warmup import warmup
 
 class LESSBasedSampler(SelectiveSampler):
     """Sampler which utilizes LESS data selection method.
@@ -18,34 +19,13 @@ class LESSBasedSampler(SelectiveSampler):
     
     def pre_epoch(self) -> None:
         """Set mask to select all samples before each epoch starts"""
-        # Step 1: 
-        warmup_process = [
-            "python", "-u", "-m", "radt","--local","--manual", "-e", "137", "tune.py","run","less/recipe/test_lora_finetune.py", 
-            "--config", "less/config/llama3_2/warmup_train.yaml"
-        ]
         
+        # STEP 1: train model on 5% of data set, and cache model locally.   
+        warmup()
         
-        # Set the PYTHONPATH in the environment to . parent folder, to include all modules. 
-        env = os.environ.copy()
-        env["PYTHONPATH"] = ".:" + env.get("PYTHONPATH", "")
-
-        print("Starting warmup subprocess")
-
-        try:
-            result = subprocess.run(warmup_process, check=True, text=True, shell=False, env=env)
-            print("Warmup finished successfully.")
-            
-        except subprocess.CalledProcessError as e:
-            print(f"Warmup subprocess failed with error: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
-        print("LESS step 1 done.. Exiting safely..")
-        sys.exit()
-    
         # STEP 2:
-
-
+        sys.exit()
+        
     def post_epoch(self) -> None:
         """No-op post epoch hook"""
         pass
