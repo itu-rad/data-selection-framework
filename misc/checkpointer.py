@@ -168,7 +168,7 @@ class radTFullModelHFCheckpointer(_CheckpointerInterface):
 
         if mlflow_run_id:
             self.download_from_mlflow(mlflow_run_id, checkpoint_dir)
-
+    
         self._resume_from_checkpoint = resume_from_checkpoint
         self._safe_serialization = safe_serialization
         self._checkpoint_dir = Path(checkpoint_dir)
@@ -239,9 +239,13 @@ class radTFullModelHFCheckpointer(_CheckpointerInterface):
         """
 
         # Check if run already downloaded
-        if os.path.exists(checkpoint_dir):
+        
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir, exist_ok=True)
+        
+        else: 
             logger.info(f"Checkpoint dir {checkpoint_dir} already exists.")
-
+        
             try:
                 with open(os.path.join(checkpoint_dir, "source"), "r") as f:
                     read_run_id = f.read()
