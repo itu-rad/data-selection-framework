@@ -10,8 +10,6 @@ import os
 # Add the parent directory to sys.path so Python can find 'selection'
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from torchtune._cli.run import Run  # Import the Run subcommand
-
 import time
 
 from functools import partial

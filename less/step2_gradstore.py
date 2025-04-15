@@ -6,6 +6,9 @@
 
 import radt
 import sys
+import os
+# Add the parent directory to sys.path so Python can find 'selection'
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import time
 
 from functools import partial
@@ -14,7 +17,7 @@ from warnings import warn
 
 import torch
 import torchtune.modules.common_utils as common_utils
-from omegaconf import DictConfig, ListConfig
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from torch import nn
 from torch.optim import Optimizer
@@ -39,6 +42,7 @@ from tqdm import tqdm
 from selection import *
 
 from misc.instantiate_safe import instantiate_safe
+from collect_grad_reps import collect_grads
 
 log = utils.get_logger("DEBUG")
 
@@ -288,7 +292,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         self._tokenizer = config.instantiate(cfg.tokenizer)
         log.info("Tokenizer is initialized from file.")
 
-        self._optimizer = self._setup_optimizer(
+        self._optimizer, self._optimizer_state_dict = self._setup_optimizer(
             cfg_optimizer=cfg.optimizer,
             opt_state_dict=(
                 checkpoint_dict[training.OPT_KEY]
@@ -311,9 +315,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         # Dataloader depends on the tokenizer and loss_fn and should be
         # setup after all of these are setup
         collate_name = cfg.get("collate_fn", "torchtune.data.padded_collate_sft")
-        self._sampler, self._dataloader = self._setup_data(
+        self._dataloader = self._setup_data(
             cfg_dataset=cfg.dataset,
-            cfg_sampler=cfg.sampler,
             shuffle=cfg.shuffle,
             batch_size=cfg.batch_size,
             collate_fn=collate_name,
@@ -502,7 +505,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             optimizer.load_state_dict(opt_state_dict)
 
         log.info("Optimizer and loss are initialized.")
-        return optimizer
+        return optimizer, optimizer.state_dict()
 
     def _setup_lr_scheduler(
         self,
@@ -523,11 +526,10 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
     def _setup_data(
         self,
         cfg_dataset: DictConfig,
-        cfg_sampler: DictConfig,
         shuffle: bool,
         batch_size: int,
         collate_fn: str,
-    ) -> Tuple[SelectiveSampler, DataLoader]:
+    ) -> Tuple[DataLoader]:
         """
         All data related setup happens here. Currently this recipe supports
         SelectiveSampler with Map-style Datasets which fit into memory.
@@ -549,26 +551,9 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(collate_fn)
 
-        # Check that component is included and set correctly
-        if cfg_sampler.get("_component_", None) is None:
-            cfg_sampler["_component_"] = "selection.FullSampler"
-
-        sampler = instantiate_safe(
-            # Kwargs in ABC
-            config=cfg_sampler,
-            dataset=ds,
-            num_replicas=1,
-            rank=0,
-            shuffle=shuffle,
-            seed=0,
-            # Optional kwargs
-            loss_fn=self._loss_fn,
-        )
-
         dataloader = DataLoader(
             dataset=ds,
             batch_size=batch_size,
-            sampler=sampler,
             # dropping last avoids shape issues with compile + flex attention
             drop_last=True,
             collate_fn=(
@@ -582,260 +567,31 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             ),
         )
 
-        log.info("Dataset and SelectiveSampler are initialized.")
+        log.info("Dataset is initialized.")
 
-        return sampler, dataloader
+        return dataloader
 
-    def save_checkpoint(self, run, epoch: int) -> None:
-        """
-        Checkpoint the state of the recipe. The constructed checkpoint state dict
-        contains the following information:
-        - Merged weights with key MODEL_KEY
-        - Adapter weights with key ADAPTER_KEY
-        - Relevant recipe state if training is not complete
-        - If the `self._save_adapter_weights_only` option is True, the checkpointer will save only the adapter weights
-
-        To correctly resume from training, the adapter weights and recipe state must be provided along with the base model weights.
-        """
-        ckpt_dict = {}
-
-        intermediate_checkpoint = epoch + 1 < self.total_epochs
-        # if training is in-progress, checkpoint the optimizer state as well
-        if intermediate_checkpoint:
-            ckpt_dict.update(
-                {
-                    training.OPT_KEY: self._optimizer.state_dict(),
-                    training.SEED_KEY: self.seed,
-                    training.EPOCHS_KEY: self.epochs_run,
-                    training.TOTAL_EPOCHS_KEY: self.total_epochs,
-                    training.MAX_STEPS_KEY: self.max_steps_per_epoch,
-                }
-            )
-        # else:  # otherwise: save to mlflow if available
-        #     run.pytorch.log_model(self._model, "model")
-
-        adapter_state_dict = get_adapter_state_dict(self._model.state_dict())
-        ckpt_dict.update({training.ADAPTER_KEY: adapter_state_dict})
-
-        if not self._save_adapter_weights_only:
-            # Construct the full state dict with LoRA weights merged into base LLM weights
-
-            # Move to CPU to avoid a copy on GPU
-            state_dict = {k: v.cpu() for k, v in self._model.state_dict().items()}
-
-            merged_state_dict = get_merged_lora_ckpt(
-                state_dict,
-                rank=self._lora_rank,
-                alpha=self._lora_alpha,
-            )
-
-            ckpt_dict.update({training.MODEL_KEY: merged_state_dict})
+    def get_info(self, cfg: DictConfig) -> None:
         
-        adapter_config = {
-            "r": self._lora_rank,
-            "lora_alpha": self._lora_alpha,
-            "target_modules": get_lora_module_names(
-                self._lora_attn_modules,
-                self._apply_lora_to_mlp,
-                self._apply_lora_to_output,
-            ),
-            "peft_type": "LORA",
-        }
-        ckpt_dict.update({training.ADAPTER_CONFIG: adapter_config})
-
-        self._checkpointer.save_checkpoint(
-            ckpt_dict,
-            epoch=epoch,
-            run=run,
-            intermediate_checkpoint=intermediate_checkpoint,
-            adapter_only=self._save_adapter_weights_only,
-        )
-
-    def _loss_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
-        # Shape [b, s], needed for the loss not the model
-        labels = batch.pop("labels")
-        # run model
-        with self.activations_handling_ctx:
-            logits = self._model(**batch)
-
-        # Shift labels to compute loss
-        # equivalent to doing labels[..., 1:] and logits[..., :-1, :]
-        # But this way we dont need to slice the logits. We just add an ignore index to labels.
-        labels = torch.hstack(
-            (labels[..., 1:], self.ignore_labels_cache[: labels.shape[0]])
-        )
-        if not isinstance(logits, list):
-            labels = labels.reshape(-1)
-            logits = logits.reshape(-1, logits.size(-1))
-
-        loss = self._loss_fn(logits, labels)
-
-        # free logits otherwise it peaks backward memory
-        del logits
-
-        return loss
-
-    def train(self, cfg: DictConfig) -> None:
-        """
-        The core training loop.
-        """
-
-        if self._compile:
-            log.info(
-                "NOTE: torch.compile is enabled and model is compiled in first forward. Expect a relatively slow first iteration."
-            )
-
-        # Initialize tokens count and running loss (for grad accumulation)
-        t0 = time.perf_counter()
-        running_loss = 0
-        num_tokens = 0
-
-        with self._profiler as prof:
-            with radt.run.RADTBenchmark() as run:
-                
-                run.autolog()
-                def log_config(run, cfg: DictConfig, directory: str) -> None:
-                    for k, v in cfg.items():
-                        if isinstance(v, DictConfig):
-                            log_config(run, v, f"{directory}.{k}")
-                        else:
-                            run.log_param(f"{directory}.{k}", v)
-
-                # Log config
-                recipe_location = sys.argv[sys.argv.index("--config") + 1]
-                run.log_artifact(recipe_location, "config")
-                log_config(run, cfg, "config")                
-                
-                # self.epochs_run should be non-zero when we're resuming from a checkpoint
-                for curr_epoch in range(self.epochs_run, self.total_epochs):
-                    # Update the sampler to ensure data is correctly shuffled across epochs
-                    # in case shuffle is True
-                    self._sampler.set_epoch(curr_epoch)
-
-                    pbar = tqdm(total=self._steps_per_epoch)
-                    self._sampler.pre_epoch()
-                    for idx, batch in enumerate(self._dataloader):
-                        if (
-                            self.max_steps_per_epoch is not None
-                            and (idx // self._gradient_accumulation_steps)
-                            == self.max_steps_per_epoch
-                        ):
-                            break
-
-                        self._sampler.on_batch(idx, batch)
-
-                        # Start tracking CUDA memory for active steps for just the first epoch
-                        if (
-                            curr_epoch == 0
-                            and self.profiler_profile_memory
-                            and idx
-                            == self.profiler_wait_steps + self.profiler_warmup_steps
-                        ):
-                            torch.cuda.memory._record_memory_history()
-
-                        utils.batch_to_device(batch, self._device)
-
-                        # Calculate the number of unmasked tokens in the current batch
-                        # and increment the total number of tokens seen in the step
-                        current_num_tokens = (
-                            batch["labels"] != self._loss_fn.ignore_index
-                        ).sum()
-                        num_tokens += current_num_tokens
-
-                        # Loss is normalized by default so we multiply by the number of tokens
-                        # This way we can normalize by the total number of tokens if we're accumulating gradients
-                        current_loss = self._loss_step(batch) * current_num_tokens
-
-                        self._sampler.after_forward(idx, batch, current_loss)
-
-                        running_loss += current_loss
-                        current_loss.backward()
-
-                        # Step with optimizer
-                        if (idx + 1) % self._gradient_accumulation_steps == 0:
-                            training.scale_grads(self._model, 1 / num_tokens)
-                            if self._clip_grad_norm is not None:
-                                grad_norm = torch.nn.utils.clip_grad_norm_(
-                                    self._model.parameters(),
-                                    max_norm=float(self._clip_grad_norm),
-                                )
-                            self._optimizer.step()
-                            self._optimizer.zero_grad(set_to_none=True)
-                            self._lr_scheduler.step()
-                            # Update the number of steps when the weights are updated
-                            self.global_step += 1
-
-                            loss_to_log = running_loss.item() / num_tokens
-                            pbar.update(1)
-                            pbar.set_description(
-                                f"{curr_epoch + 1}|{self.global_step}|Loss: {loss_to_log}"
-                            )
-
-                            # Log per-step metrics
-                            if self.global_step % self._log_every_n_steps == 0:
-                                time_per_step = time.perf_counter() - t0
-                                log_dict = {
-                                    "loss": loss_to_log,
-                                    "lr": self._optimizer.param_groups[0]["lr"],
-                                    "tokens_per_second_per_gpu": num_tokens
-                                    / time_per_step,
-                                }
-                                if (
-                                    self._device.type == "cuda"
-                                    and self._log_peak_memory_stats
-                                ):
-                                    log_dict.update(
-                                        training.get_memory_stats(device=self._device)
-                                    )
-                                if self._clip_grad_norm is not None:
-                                    log_dict.update({"grad_norm": grad_norm})
-                                self._metric_logger.log_dict(
-                                    log_dict,
-                                    step=self.global_step,
-                                )
-                                log_dict["epoch"] = curr_epoch
-                                mlflow_dict = {f"ML - {k}": v for k, v in log_dict.items()}
-                                run.log_metrics(mlflow_dict, epoch=curr_epoch)
-
-                            # Reset running stats for the next step
-                            running_loss = 0
-                            num_tokens = 0
-                            t0 = time.perf_counter()
-
-                        # Stop tracking CUDA memory now that active steps are complete
-                        if (
-                            curr_epoch == 0
-                            and self.profiler_profile_memory
-                            and idx
-                            == self.profiler_wait_steps
-                            + self.profiler_warmup_steps
-                            + self.profiler_active_steps
-                        ):
-                            torch.cuda.memory._record_memory_history(enabled=None)
-
-                        # Step the profiler
-                        # Note we are stepping each batch, which might not include optimizer step in the trace
-                        # if the schedule cycle doesn't align with gradient accumulation.
-                        prof.step()
-
-                    self._sampler.post_epoch()
-
-                    self.epochs_run += 1
-                    start_save_checkpoint = time.perf_counter()
-                    log.info("Starting checkpoint save...")
-                    self.save_checkpoint(run=run, epoch=curr_epoch)
-                    log.info(
-                        "Checkpoint saved in {:.2f} seconds.".format(
-                            time.perf_counter() - start_save_checkpoint
-                        )
-                    )
-
-    def cleanup(self) -> None:
-        self._metric_logger.close()
+        collect_grads(dataloader=self._dataloader,
+              model=self._model,
+              output_dir=cfg.output_dir,
+              proj_dim=cfg.gradient_projection_dimension,
+              gradient_type=cfg.gradient_type,
+              adam_optimizer_state=self._optimizer_state_dict,
+              max_samples=cfg.max_samples)
+        
+        # collect_grads(dataloader,
+            #   model,
+            #   args.output_path,
+            #   proj_dim=args.gradient_projection_dimension,
+            #   gradient_type=args.gradient_type,
+            #   adam_optimizer_state=adam_optimizer_state,
+            #   max_samples=args.max_samples)
 
 
-@config.parse
-def recipe_main(cfg: DictConfig) -> None:
+
+def recipe_main(cfg: DictConfig = "less/config/llama3_2/gradstore.yaml") -> None:
     """
     Entry point for the recipe.
 
@@ -843,11 +599,15 @@ def recipe_main(cfg: DictConfig) -> None:
         - Parameters specified in config (see available configs through ``tune ls``)
         - Overwritten by arguments from the command-line
     """
+    cfg = OmegaConf.load(cfg)
     config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
     recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
     recipe.setup(cfg=cfg)
     # recipe.train(cfg=cfg)
     # Here the recipe must build the gradstore instead of training.
+    
+    recipe.get_info(cfg=cfg)
+
     recipe.cleanup()
 
 

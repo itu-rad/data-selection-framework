@@ -21,3 +21,18 @@ class FullSampler(SelectiveSampler):
     def after_forward(self, idx: int, batch: dict, current_loss: float) -> None:
         """No-op after forward hook"""
         pass
+
+    def inform_logits(self, idx: int, batch: dict, current_loss: float) -> None:
+        """Hook called after model forward pass. Must be implemented by subclasses.
+
+        Args:
+            idx (int): The index/step number of the current batch
+            batch (dict): The batch data dictionary containing inputs and labels
+            current_loss (float): The loss value from the current forward pass
+        """
+        pass
+
+    def sample(self) -> None:
+        """Called after first phase forward pass in sample-then-batch
+        """
+        pass
