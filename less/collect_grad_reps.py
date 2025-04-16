@@ -110,29 +110,6 @@ def obtain_gradients(model, batch):
 
 
 # 
-def loss_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
-        # Shape [b, s], needed for the loss not the model
-        labels = batch.pop("labels")
-        # run model
-       
-        logits = self._model(**batch)
-
-        # Shift labels to compute loss
-        # equivalent to doing labels[..., 1:] and logits[..., :-1, :]
-        # But this way we dont need to slice the logits. We just add an ignore index to labels.
-        labels = torch.hstack(
-            (labels[..., 1:], self.ignore_labels_cache[: labels.shape[0]])
-        )
-        if not isinstance(logits, list):
-            labels = labels.reshape(-1)
-            logits = logits.reshape(-1, logits.size(-1))
-
-        loss = self._loss_fn(logits, labels)
-
-        # free logits otherwise it peaks backward memory
-        del logits
-
-        return loss
 
 def obtain_gradients_with_adam(model, batch, avg, avg_sq):
     """ obtain gradients with adam optimizer states. """
