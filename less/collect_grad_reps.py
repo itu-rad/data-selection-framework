@@ -1,8 +1,8 @@
 import json
 import os
 from hashlib import md5
-from typing import Iterable, List, Optional
-
+from typing import Dict, Iterable, List, Optional
+import inspect
 import torch
 import torch.nn.functional as F
 from functorch import grad, make_functional_with_buffers, vmap
@@ -32,10 +32,10 @@ def get_max_saved_index(output_dir: str, prefix="reps") -> int:
         int: The maximum representation index, or -1 if no index is found.
     """
 
-    files = [file for file in os.listdir(
-        output_dir) if file.startswith(prefix)]
-    index = [int(file.split(".")[0].split("-")[1])
-             for file in files]  # e.g., output_dir/reps-100.pt
+    files = [file for file in os.listdir(output_dir) if file.startswith(prefix)]
+    
+    index = [int(file.split(".")[0].split("-")[1]) for file in files]  # e.g., output_dir/reps-100.pt
+    
     return max(index) if len(index) > 0 else -1
 
 
@@ -46,6 +46,7 @@ def get_output(model,
                attention_mask=None,
                labels=None,
                ) -> Tensor:
+    
     logits = model(weights, buffers, *(input_ids.unsqueeze(0),
                    attention_mask.unsqueeze(0))).logits
     labels = labels.unsqueeze(0)
@@ -78,11 +79,12 @@ def get_trak_projector(device: torch.device):
 def get_number_of_params(model):
     """ Make sure that only lora parameters require gradients in peft models. """
     if isinstance(model, PeftModel):
-        names = [n for n, p in model.named_parameters(
-        ) if p.requires_grad and "lora" not in n]
+        names = [n for n, p in model.named_parameters() if p.requires_grad and "lora" not in n]
+        
         assert len(names) == 0
-    num_params = sum([p.numel()
-                     for p in model.parameters() if p.requires_grad])
+        
+    num_params = sum([p.numel() for p in model.parameters() if p.requires_grad])
+    
     print(f"Total number of parameters that require gradients: {num_params}")
     return num_params
 
@@ -91,22 +93,46 @@ def obtain_gradients(model, batch):
     """ obtain gradients. """
     loss = model(**batch).loss
     loss.backward()
-    vectorized_grads = torch.cat(
-        [p.grad.view(-1) for p in model.parameters() if p.grad is not None])
+    vectorized_grads = torch.cat([p.grad.view(-1) for p in model.parameters() if p.grad is not None])
     return vectorized_grads
 
 
-def obtain_sign_gradients(model, batch):
-    """ obtain gradients with sign. """
-    loss = model(**batch).loss
-    loss.backward()
+# May or may not be needed. 
+#def obtain_sign_gradients(model, batch):
+#    """ obtain gradients with sign. """
+#    loss = model(**batch).loss
+#    loss.backward()
+#
+#    # Instead of concatenating the gradients, concatenate their signs
+#    vectorized_grad_signs = torch.cat([torch.sign(p.grad).view(-1) for p in model.parameters() if p.grad is not None])
+#
+#    return vectorized_grad_signs
 
-    # Instead of concatenating the gradients, concatenate their signs
-    vectorized_grad_signs = torch.cat(
-        [torch.sign(p.grad).view(-1) for p in model.parameters() if p.grad is not None])
 
-    return vectorized_grad_signs
+# 
+def loss_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        # Shape [b, s], needed for the loss not the model
+        labels = batch.pop("labels")
+        # run model
+       
+        logits = self._model(**batch)
 
+        # Shift labels to compute loss
+        # equivalent to doing labels[..., 1:] and logits[..., :-1, :]
+        # But this way we dont need to slice the logits. We just add an ignore index to labels.
+        labels = torch.hstack(
+            (labels[..., 1:], self.ignore_labels_cache[: labels.shape[0]])
+        )
+        if not isinstance(logits, list):
+            labels = labels.reshape(-1)
+            logits = logits.reshape(-1, logits.size(-1))
+
+        loss = self._loss_fn(logits, labels)
+
+        # free logits otherwise it peaks backward memory
+        del logits
+
+        return loss
 
 def obtain_gradients_with_adam(model, batch, avg, avg_sq):
     """ obtain gradients with adam optimizer states. """
@@ -114,7 +140,7 @@ def obtain_gradients_with_adam(model, batch, avg, avg_sq):
     beta2 = 0.999
     eps = 1e-08
 
-    loss = model(**batch).loss
+    loss = loss_step(model, batch)
     loss.backward()
 
     vectorized_grads = torch.cat(
@@ -128,26 +154,41 @@ def obtain_gradients_with_adam(model, batch, avg, avg_sq):
 
 
 def prepare_optimizer_state(model, optimizer_state, device):
-    # Print the parameter names
-    for name, param in model.named_parameters():
-        print(name)
+  
+    # print("Model parameter names:")
+    #for name, param in model.named_parameters():
+    #    print(name)
 
-    print("---")
-    # Check the structure of the 'state' key in optimizer_state
-    for key in optimizer_state['state']:
-        print(f"Parameter name in optimizer_state: {key}")
+    #print("---")
+    #print("Optimizer state keys (parameter IDs):")
+    #for key in optimizer_state['state']:
+    #    print(f"Parameter ID: {key}")
 
-        # Print the state for each parameter (e.g., exp_avg)
-        if 'exp_avg' in optimizer_state['state'][key]:
-            print(f"exp_avg for {key}: {optimizer_state['state'][key]['exp_avg']}")
+    #    if 'exp_avg' in optimizer_state['state'][key]:
+    #        print(f"exp_avg for param id {key}: {optimizer_state['state'][key]['exp_avg'].shape}")
+    #    
+    #    if 'exp_avg_sq' in optimizer_state['state'][key]:
+    #        print(f"exp_avg_sq for param id {key}: {optimizer_state['state'][key]['exp_avg_sq'].shape}")
+        
 
-    names = [n for n, p in model.named_parameters() if p.requires_grad]
-    avg = torch.cat([optimizer_state[n]["exp_avg"].view(-1) for n in names])
-    avg_sq = torch.cat([optimizer_state[n]["exp_avg_sq"].view(-1)
-                       for n in names])
-    avg = avg.to(device)
-    avg_sq = avg_sq.to(device)
+    # Build mapping from param -> param_id
+    param_id_map = {id(p): n for n, p in model.named_parameters()}
+    avg_list = []
+    avg_sq_list = []
+
+    for param_id, state in optimizer_state["state"].items():
+        if "exp_avg" in state and "exp_avg_sq" in state:
+            avg_list.append(state["exp_avg"].view(-1))
+            avg_sq_list.append(state["exp_avg_sq"].view(-1))
+        else:
+            name = param_id_map.get(param_id, f"<unknown id {param_id}>")
+            print(f"Warning: Missing state entries for param {name}")
+
+    avg = torch.cat(avg_list).to(device)
+    avg_sq = torch.cat(avg_sq_list).to(device)
+
     return avg, avg_sq
+
 
 
 def collect_grads(dataloader,
@@ -255,6 +296,9 @@ def collect_grads(dataloader,
         if gradient_type == "adam":
             if count == 1:
                 print("Using Adam gradients")
+                
+                print(inspect.signature(model.forward))
+                print("Batch keys:", batch.keys())
             vectorized_grads = obtain_gradients_with_adam(model, batch, m, v)
         elif gradient_type == "sign":
             if count == 1:

@@ -294,11 +294,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         self._optimizer = self._setup_optimizer(
             cfg_optimizer=cfg.optimizer,
-            opt_state_dict=(
-                checkpoint_dict[training.OPT_KEY]
-                if self._resume_from_checkpoint
-                else None
-            ),
+            opt_state_dict=(checkpoint_dict[training.OPT_KEY] if self._resume_from_checkpointelse else None),
         )
 
         # initialize loss
@@ -590,7 +586,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         return sampler, dataloader
 
-    def save_checkpoint(self, run, epoch: int) -> None:
+    def save_checkpoint(self,epoch: int) -> None:
         """
         Checkpoint the state of the recipe. The constructed checkpoint state dict
         contains the following information:
@@ -650,7 +646,6 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         self._checkpointer.save_checkpoint(
             ckpt_dict,
             epoch=epoch,
-            # run=run,
             intermediate_checkpoint=intermediate_checkpoint,
             adapter_only=self._save_adapter_weights_only,
         )
@@ -695,21 +690,6 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         num_tokens = 0
 
         with self._profiler as prof:
-            # with radt.run.RADTBenchmark() as run:
-                
-                # def log_config(run, cfg: DictConfig, directory: str) -> None:
-                #     for k, v in cfg.items():
-                #         if isinstance(v, DictConfig):
-                #             log_config(run, v, f"{directory}.{k}")
-                #         else:
-                #             run.log_param(f"{directory}.{k}", v)
-
-                # # Log config
-                # recipe_location = sys.argv[sys.argv.index("--config") + 1]
-                # run.log_artifact(recipe_location, "config")
-                # log_config(run, cfg, "config")                
-                
-                # self.epochs_run should be non-zero when we're resuming from a checkpoint
                 for curr_epoch in range(self.epochs_run, self.total_epochs):
                     # Update the sampler to ensure data is correctly shuffled across epochs
                     # in case shuffle is True
@@ -822,7 +802,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                         prof.step()
 
                     self._sampler.post_epoch()
-
+                    
                     self.epochs_run += 1
                     start_save_checkpoint = time.perf_counter()
                     log.info("Starting checkpoint save...")

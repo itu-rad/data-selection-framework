@@ -502,7 +502,9 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
     ) -> Optimizer:
         optimizer = config.instantiate(cfg_optimizer, self._model.parameters())
         if opt_state_dict:
-            optimizer.load_state_dict(opt_state_dict)
+           print("loading optimizer state dict")
+           optimizer.load_state_dict(opt_state_dict)
+            
 
         log.info("Optimizer and loss are initialized.")
         return optimizer, optimizer.state_dict()
