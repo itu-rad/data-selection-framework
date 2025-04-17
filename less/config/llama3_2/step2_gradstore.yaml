@@ -15,7 +15,7 @@
 #
 # This config works only for training on single device.
 
-output_dir: ./gradstore/
+output_dir: ./less/gradstore/
 
 
 gradient_projection_dimension: [8192]
@@ -48,8 +48,8 @@ checkpointer:
   checkpoint_files: [
      ft-model-00001-of-00001.safetensors
   ]
-  adapter_checkpoint: /home/niklas/data-selection-framework/model_cache/less/warmup_models/llama3_2_1B/epoch_3/adapter_model.pt
-  recipe_checkpoint: /home/niklas/data-selection-framework/model_cache/less/warmup_models/llama3_2_1B/recipe_state/recipe_state.pt
+  adapter_checkpoint: adapter_model.pt
+  recipe_checkpoint: recipe_state.pt
   output_dir: ${output_dir}
   model_type: LLAMA3_2
 resume_from_checkpoint: True # Must be True for LESS implementation since torchtune links 

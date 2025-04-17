@@ -760,7 +760,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             print("Finished")
 
 
-    def merge_and_normalize_info(output_dir: str, prefix="reps"):
+    def merge_and_normalize_info(self, output_dir: str, prefix="reps"):
         """ Merge and normalize the representations and gradients into a single file. """
         info = os.listdir(output_dir)
         info = [file for file in info if file.startswith(prefix)]
@@ -780,7 +780,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
 
 
-    def merge_info(output_dir: str, prefix="reps"):
+    def merge_info(self, output_dir: str, prefix="reps"):
         """ Merge the representations and gradients into a single file without normalization. """
         info = os.listdir(output_dir)
         info = [file for file in info if file.startswith(prefix)]
@@ -796,10 +796,34 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         torch.save(merged_data, output_file)
         print(
             f"Saving the unnormalized {prefix} (Shape: {merged_data.shape}) to {output_file}.")
+    
+def set_checkpoint_paths(cfg):
+    # get current directory
+    current_dir = os.getcwd()
+    
+    # get checkpoint directory
+    checkpoint_dir = cfg.checkpointer.checkpoint_dir
+    
+    # dynamically set adapter path
+    adapter_file = cfg.checkpointer.adapter_checkpoint
+    adapter_path = os.path.join(current_dir, checkpoint_dir, adapter_file)
+    print("Setting adapter_checkpoint config:", adapter_path)
+    cfg.checkpointer.adapter_checkpoint = adapter_path
 
+    # dynamically set recipe state path
+    checkpoint_parent_dir = os.path.dirname(checkpoint_dir)
+    recipe_state_file =cfg.checkpointer.recipe_checkpoint
+    recipe_state_path = os.path.join(current_dir, checkpoint_parent_dir, "recipe_state",recipe_state_file)
+    print("Setting recipe_checkpoint path in config:", recipe_state_path)
+    cfg.checkpointer.recipe_checkpoint = recipe_state_path
+    return cfg
+    
+    
 def recipe_main(cfg: DictConfig = "less/config/llama3_2/step2_gradstore.yaml") -> None:
    
     cfg = OmegaConf.load(cfg)
+    cfg = set_checkpoint_paths(cfg)
+    
     config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
     recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
     recipe.setup(cfg=cfg)
