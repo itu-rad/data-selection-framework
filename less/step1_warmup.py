@@ -22,7 +22,7 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from torch import nn
 from torch.optim import Optimizer
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader
 from torchtune import config, modules, training, utils
 from torchtune.config._utils import _get_component_from_path
 from torchtune.data import padded_collate_packed
@@ -48,86 +48,6 @@ log = utils.get_logger("DEBUG")
 
 
 class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
-    """
-    LoRA finetuning recipe for dense transformer-based LLMs such as Llama2. This recipe is optimized
-    for single GPU training. Training on CPU is not supported.
-
-    Features:
-        - Activation Checkpointing. This can be controlled using the ``enable_activation_checkpointing``
-            flag. Activation checkpointing helps reduce the memory footprint since we no longer keep
-            activations in memory and instead recompute them during the backward pass. This is especially
-            helpful for larger batch sizes when you're memory constrained. But these savings in memory
-            come at the cost of training performance. In most cases training can slow-down quite a bit as
-            a result of this activation recomputation.
-
-        - Activation Offloading. This can be controlled using the ``enable_activation_offloading``
-            flag. Activation offloading is a technique similar to activations checkpointing that helps
-            reduce the memory footprint to prevent OOMs on CUDA and enable bigger batches. Where activations
-            checkpointing drops the activation in the forward to recompute it later in the backward,
-            activations offloading will drop the activation in the forward to the CPU and bring it
-            back during the backward pass. As always, there is a tradeoff--these savings in memory can
-            come at the cost of training performance and CPU resources. To recover some runtime cost,
-            we've added an option to enable offloading on a different stream to permit overlapping with
-            the computation. This option is currently only available on PyTorch 2.5 or later and will
-            be enabled by default if an acceptable torch version is found. Activation offloading can be
-            used in conjunction with activation checkpointing.
-
-        - Precision. Full fp32 and bf16 training are supported. Precision is controlled using the ``dtype``
-            flag. When ``dtype=bf16``, all activations, gradients and optimizer states are in bfloat16. In
-            most cases this should halve the memory footprint of full precision (fp32) training, without
-            loss in model quality (will depend on the model, training data and other settings). For
-            GPUs which do not support bfloat16, we fall back to fp32. Mixed precision training and fp16
-            precision are currently not supported.
-
-        - Gradient Accumulation. You can simulate larger batch sizes by accumulating gradients. This is
-            controlled using the ``gradient_accumulation_steps`` flag.
-
-                Total Batch Size = batch_size * gradient accumulation steps.
-
-            For example: with batch_size=1 and gradient_accumulation_steps=32 we get a total batch size of 32.
-
-            Gradient accumulation is especially useful when you are memory constrained. In this case,
-            accumulating gradients might give you better training speed than enabling activation
-            checkpointing.
-
-        - Lower precision optimizers. This recipe supports lower-precision optimizers from the bitsandbytes
-            library (https://huggingface.co/docs/bitsandbytes/main/en/index). We've tested the recipe with
-            8-bit AdamW and Paged AdamW.
-
-        - Checkpointing. Model weights are checkpointed both at the end of each epoch and at the end of
-            training. Currently we checkpoint both the adapter weights (trainable params only) and the
-            complete merged weights (adapter weights added back to the base model). For more details
-            please take a look at our LoRA tutorial
-            (https://pytorch.org/torchtune/main/tutorials/lora_finetune.html).
-
-            Optimizer State and recipe state (seed, total_epochs, number of epochs run etc) are
-            only saved at the end of a given epoch and used in case of resuming training. Resuming
-            training is controlled by the ``resume_from_checkpoint`` flag. Mid-epoch checkpointing is
-            currently not supported.
-
-            For more details on the checkpointer, please take a look at
-            our checkpointer deepdive (https://pytorch.org/torchtune/main/tutorials/checkpointer.html).
-
-        - Logging. Terminal, Disk, WandB and TensorBoard are all supported.
-
-        - Gradient Clipping. Gradient clipping is supported using the ``clip_grad_norm`` flag. By default,
-            ``clip_grad_norm`` is set to ``None``. If you only want to log the grad norm, you can set
-            ``clip_grad_norm='inf'``.
-
-    For a full list of example configs for this recipe, run ``tune ls`` on the command line. Each config
-    has example commands for how to kick-off training.
-
-    Args:
-        cfg (DictConfig): OmegaConf object parsed from yaml file
-
-    Raises:
-        ValueError: If ``dtype`` is set to fp16.
-        RuntimeError: If ``dtype`` is set to bf16 and the hardware does not support bf16.
-        RuntimeError: If ``enable_activation_offloading`` is True and device is not CUDA.
-        RuntimeError: If ``enable_activation_offloading`` is True and ``enable_activation_checkpointing`` is False.
-        RuntimeError: If ``left_pad_sequence`` is set as the data collator
-
-    """
 
     def __init__(self, cfg: DictConfig) -> None:
         self._device = utils.get_device(device=cfg.device)
@@ -255,10 +175,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             ) from e
 
     def setup(self, cfg: DictConfig) -> None:
-        """
-        Setup the recipe state. This includes recipe state (if resume_from_checkpoint is True),
-        model, tokenizer, loss, optimizer, learning rate scheduler, sampler, and dataloader.
-        """
+      
+      
         self._metric_logger = config.instantiate(cfg.metric_logger)
 
         # log config with parameter override
@@ -319,13 +237,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             collate_fn=collate_name,
         )
 
-        # Finally update the recipe state which can only be correctly set after all of the
-        # other components have been initialized and updated.
 
-        # Number of training steps in each epoch depends on the number of batches produced
-        # by the dataloader and the max_steps_per_epoch param set by the user and is used
-        # for logging and tracking training state. This should be computed after the dataloader
-        # has been setup
         self._steps_per_epoch = (
             # implemented static LESS warmup percentage, so tqdm will regard total bar to desired warmup percentage. 
             int(len(self._dataloader) // self._gradient_accumulation_steps) 
@@ -357,45 +269,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
     def _setup_profiler(
         self, cfg_profiler: Optional[DictConfig] = None
     ) -> Union[torch.profiler.profile, DummyProfiler]:
-        """
-        Parses the `profiler` section of top-level `cfg` and sets up profiler
-
-        Args:
-            cfg_profiler (Optional[DictConfig]): ``profiler`` section of the top-level ``cfg`` (the main config passed to
-                `recipe.main`). Default None.
-
-        Returns:
-            profiler: Union[torch.profiler.profile, DummyProfiler] - DummyProfiler is a nullcontext with no-op methods
-            for `start`, `stop`, and `step` that can be used in place of `torch.profiler.profile` if profiler is not enabled such
-            that the instrumented training loop does not need to be changed profiling is disabled.
-
-        The profiler config can be provided in configs under the `profiler` key with the following layout:
-
-        .. code-block:: yaml
-            profiler:
-                enabled: bool
-
-                #Output directory of trace artifacts
-                output_dir: str
-
-            #`torch.profiler.ProfilerActivity` types to trace
-            cpu: bool
-            cuda: bool
-
-                #Trace options
-                profile_memory: bool
-                with_stack: bool
-                record_shapes: bool
-                with_flops: bool
-
-            # `torch.profiler.schedule` options:
-            # wait_steps -> wait, warmup_steps -> warmup, active_steps -> active, num_cycles -> repeat
-            wait_steps: int
-            warmup_steps: int
-            active_steps: int
-            num_cycles: int
-        """
-
+        
+        
         # Missing profiler section in config, assume disabled
         if cfg_profiler is None:
             cfg_profiler = DictConfig({"enabled": False})
@@ -528,11 +403,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         batch_size: int,
         collate_fn: str,
     ) -> Tuple[SelectiveSampler, DataLoader]:
-        """
-        All data related setup happens here. Currently this recipe supports
-        SelectiveSampler with Map-style Datasets which fit into memory.
-        Other samplers, iterable datasets and streaming datasets are not supported.
-        """
+        
+        
         if isinstance(cfg_dataset, ListConfig):
             datasets = [
                 config.instantiate(single_cfg_dataset, self._tokenizer)
@@ -587,16 +459,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         return sampler, dataloader
 
     def save_checkpoint(self,epoch: int) -> None:
-        """
-        Checkpoint the state of the recipe. The constructed checkpoint state dict
-        contains the following information:
-        - Merged weights with key MODEL_KEY
-        - Adapter weights with key ADAPTER_KEY
-        - Relevant recipe state if training is not complete
-        - If the `self._save_adapter_weights_only` option is True, the checkpointer will save only the adapter weights
-
-        To correctly resume from training, the adapter weights and recipe state must be provided along with the base model weights.
-        """
+       
+       
         ckpt_dict = {}
 
         intermediate_checkpoint = epoch + 1 < self.total_epochs
@@ -675,14 +539,9 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         return loss
 
     def train(self, cfg: DictConfig) -> None:
-        """
-        The core training loop.
-        """
 
         if self._compile:
-            log.info(
-                "NOTE: torch.compile is enabled and model is compiled in first forward. Expect a relatively slow first iteration."
-            )
+            log.info()
 
         # Initialize tokens count and running loss (for grad accumulation)
         t0 = time.perf_counter()
@@ -776,9 +635,6 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                                     log_dict,
                                     step=self.global_step,
                                 )
-                                # log_dict["epoch"] = curr_epoch
-                                # mlflow_dict = {f"ML - {k}": v for k, v in log_dict.items()}
-                                # run.log_metrics(mlflow_dict, epoch=curr_epoch)
 
                             # Reset running stats for the next step
                             running_loss = 0
@@ -796,9 +652,6 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                         ):
                             torch.cuda.memory._record_memory_history(enabled=None)
 
-                        # Step the profiler
-                        # Note we are stepping each batch, which might not include optimizer step in the trace
-                        # if the schedule cycle doesn't align with gradient accumulation.
                         prof.step()
 
                     self._sampler.post_epoch()
@@ -818,14 +671,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         self._metric_logger.close()
 
 
-def warmup(cfg: DictConfig = "less/config/llama3_2/warmup_train.yaml") -> None:
-    """
-    Entry point for the recipe.
-
-    Configurable parameters are read in the following order:
-        - Parameters specified in config (see available configs through ``tune ls``)
-        - Overwritten by arguments from the command-line
-    """
+def warmup(cfg: DictConfig = "less/config/llama3_2/step1_warmup.yaml") -> None:
+    
     cfg = OmegaConf.load(cfg)
     config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
     recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
