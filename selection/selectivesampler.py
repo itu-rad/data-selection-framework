@@ -38,13 +38,17 @@ class SelectiveSampler(DistributedSampler, ABC):
         self.mask = mask
 
     def __iter__(self):
-        indices = list(super().__iter__())
+        # Override the __iter__ method to filter samples based on the mask
+        # Keep in mind that the RNG comes from the data loader shuffling indices, not the mask itself
+        # This means that the mask is applied after the shuffling
+        # Keeping the same mask between epochs does not guarantee same data elements
+        indices = list(self.get_iterator())
 
         if self.mask is None:
             raise RuntimeError("No mask set - call set_mask() before iterating")
 
         indices = [idx for i, idx in enumerate(indices) if self.mask[i]]
-        
+
         if not indices:
             raise RuntimeError("No samples selected - mask may be all False or unset")
 
@@ -54,6 +58,10 @@ class SelectiveSampler(DistributedSampler, ABC):
         if self.mask is not None:
             return sum(self.mask)
         return len(self.dataset)
+
+    def get_iterator(self):
+        """Get the iterator for the dataset. This is used to get the indices for the sampler."""
+        return super().__iter__()
 
     @abstractmethod
     def pre_epoch(self) -> None:
@@ -99,6 +107,5 @@ class SelectiveSampler(DistributedSampler, ABC):
 
     @abstractmethod
     def sample(self) -> None:
-        """Called after first phase forward pass in sample-then-batch
-        """
+        """Called after first phase forward pass in sample-then-batch"""
         pass

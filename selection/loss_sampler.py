@@ -1,4 +1,5 @@
 import copy
+import math
 import torch
 from selection.selectivesampler import SelectiveSampler
 
@@ -20,6 +21,7 @@ class LossSampler(SelectiveSampler):
         shuffle=True,
         seed=0,
         sampling_ratio: float = 0.5,
+        num_passes: float = -1,
     ):
         super().__init__(
             dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed
@@ -32,13 +34,25 @@ class LossSampler(SelectiveSampler):
         self._loss_buffer = {}  # {sample_id: (loss_sum, valid_tokens)}
         self.mask = None  # Boolean tensor of size len(dataset)
         self.no_grad_scoring = True
+        self.sampling = False
+        self.sampling_indices = None
+
+        self.num_passes = num_passes
+        if self.num_passes == -1:
+            self.num_passes = 1300
+            # self.num_passes = math.ceil(len(dataset) * self.sampling_ratio)
+            print(
+                "\n\n\n\n\n\nDATASET SIZE!!!",
+                len(dataset),
+                "numpasses",
+                self.num_passes,
+            )
+        elif self.num_passes < 0:
+            self.num_passes = math.ceil(1 / self.num_passes)
 
     def pre_epoch(self) -> None:
-        # Reset the loss buffer and mask at the start of each epoch.
-        self._loss_buffer = {}
-        n = len(self.dataset)
-        mask = [True] * n
-        self.set_mask(mask)
+        self.sampling_indices = list(self.get_iterator())
+        self.test_see_if_all_indices = None
 
     def post_epoch(self) -> None:
         pass
@@ -119,3 +133,57 @@ class LossSampler(SelectiveSampler):
         self.set_mask(mask)
 
         print(f"new mask sum = {sum(self.mask)}")
+
+    def prepare_sampling_epoch(self, epoch, sample_epoch):
+        # Reset the loss buffer and mask at the start of each sample epoch.
+        self._loss_buffer = {}
+        n = len(self.dataset)
+        mask = [True] * n
+        self.sampling = True
+        self.sampling_start = sample_epoch * n // self.num_passes
+        self.sampling_end = (sample_epoch + 1) * n // self.num_passes
+
+        # start = sample_epoch * n // self.num_passes
+        # end = (sample_epoch + 1) * n // self.num_passes
+        # mask[start:end] = [True] * (end - start)
+        # Set the mask to select a subset of samples for this sample epoch.
+        self.set_mask(mask)
+
+    def prepare_training_epoch(self, epoch, sample_epoch):
+        # Disable sampling mode
+        self.sampling = False
+
+    def __iter__(self):
+        if self.sampling:
+            return iter(self.sampling_indices[self.sampling_start : self.sampling_end])
+
+        indices = self.get_iterator()
+
+        if self.mask is None:
+            raise RuntimeError("No mask set - call set_mask() before iterating")
+
+        indices = [idx for idx in indices if self.mask[idx]]
+
+        if self.test_see_if_all_indices is None:
+            self.test_see_if_all_indices = [0] * len(self.dataset)
+
+        for idx in indices:
+            self.test_see_if_all_indices[idx] += 1
+
+        print("\n\n\n")
+        print("Max indices:", max(self.test_see_if_all_indices))
+        print("Min indices:", min(self.test_see_if_all_indices))
+        print("Sum indices:", sum(self.test_see_if_all_indices))
+
+        if not indices:
+            raise RuntimeError("No samples selected - mask may be all False or unset")
+
+        return iter(indices)
+
+    def __len__(self) -> int:
+        if self.sampling:
+            return self.sampling_end - self.sampling_start
+
+        if self.mask is not None:
+            return sum(self.mask)
+        return len(self.dataset)
