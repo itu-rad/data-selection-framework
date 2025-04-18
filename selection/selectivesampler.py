@@ -42,12 +42,26 @@ class SelectiveSampler(DistributedSampler, ABC):
         # Keep in mind that the RNG comes from the data loader shuffling indices, not the mask itself
         # This means that the mask is applied after the shuffling
         # Keeping the same mask between epochs does not guarantee same data elements
-        indices = list(self.get_iterator())
+        if self.sampling:
+            return iter(self.sampling_indices[self.sampling_start : self.sampling_end])
+
+        indices = self.get_iterator()
 
         if self.mask is None:
             raise RuntimeError("No mask set - call set_mask() before iterating")
 
-        indices = [idx for i, idx in enumerate(indices) if self.mask[i]]
+        indices = [idx for idx in indices if self.mask[idx]]
+
+        if self.test_see_if_all_indices is None:
+            self.test_see_if_all_indices = [0] * len(self.dataset)
+
+        for idx in indices:
+            self.test_see_if_all_indices[idx] += 1
+
+        print("\n\n\n")
+        print("Max indices:", max(self.test_see_if_all_indices))
+        print("Min indices:", min(self.test_see_if_all_indices))
+        print("Sum indices:", sum(self.test_see_if_all_indices))
 
         if not indices:
             raise RuntimeError("No samples selected - mask may be all False or unset")
@@ -55,9 +69,31 @@ class SelectiveSampler(DistributedSampler, ABC):
         return iter(indices)
 
     def __len__(self) -> int:
+        if self.sampling:
+            return self.sampling_end - self.sampling_start
+
         if self.mask is not None:
             return sum(self.mask)
         return len(self.dataset)
+
+    def prepare_sampling_epoch(self, epoch, sample_epoch):
+        # Reset the loss buffer and mask at the start of each sample epoch.
+        self._loss_buffer = {}  # TODO: move
+        n = len(self.dataset)
+        mask = [True] * n
+        self.sampling = True
+        self.sampling_start = sample_epoch * n // self.num_passes
+        self.sampling_end = (sample_epoch + 1) * n // self.num_passes
+
+        # start = sample_epoch * n // self.num_passes
+        # end = (sample_epoch + 1) * n // self.num_passes
+        # mask[start:end] = [True] * (end - start)
+        # Set the mask to select a subset of samples for this sample epoch.
+        self.set_mask(mask)
+
+    def prepare_training_epoch(self, epoch, sample_epoch):
+        # Disable sampling mode
+        self.sampling = False
 
     def get_iterator(self):
         """Get the iterator for the dataset. This is used to get the indices for the sampler."""
