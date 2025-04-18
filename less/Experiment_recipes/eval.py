@@ -490,12 +490,12 @@ class EleutherEvalRecipe(EvalRecipeInterface):
                 )
             model = quantizer.quantize(model)
             model = model.to(device=self.device, dtype=self.dtype)
-            ckpt_dict = checkpointer.load_checkpoint(weights_only=False)[
-                training.MODEL_KEY
-            ]
+            ckpt_dict = checkpointer.load_checkpoint(weights_only=False)[training.MODEL_KEY]
+            
             for k, v in ckpt_dict.items():
                 ckpt_dict[k] = v.to(self.device)
             model.load_state_dict(ckpt_dict, assign=True)
+            
         else:
             ckpt_dict = checkpointer.load_checkpoint()[training.MODEL_KEY]
             model.load_state_dict(ckpt_dict)
@@ -508,6 +508,7 @@ class EleutherEvalRecipe(EvalRecipeInterface):
         # see https://github.com/pytorch/pytorch/issues/124464
         model.eval()
 
+
         # Initialize tokenizer/transform
         model_transform = config.instantiate(cfg.tokenizer)
 
@@ -519,6 +520,7 @@ class EleutherEvalRecipe(EvalRecipeInterface):
                     "Received enable_kv_cache=False, but KV cache is required for running "
                     "multimodal generation in a timely manner. Setting enable_kv_cache=True."
                 )
+                
         elif isinstance(model, TransformerDecoder):
             eleuther_model_wrapper = _LLMEvalWrapper
         self.eleuther_model_wrapper = eleuther_model_wrapper(
@@ -537,7 +539,6 @@ class EleutherEvalRecipe(EvalRecipeInterface):
         task_dict = get_task_dict(self.tasks, task_manager)
 
         with radt.run.RADTBenchmark() as run:
-
             def log_config(run, cfg: DictConfig, directory: str) -> None:
                 for k, v in cfg.items():
                     if isinstance(v, DictConfig):

@@ -7,7 +7,7 @@
 import sys
 import os
 # Add the parent directory to sys.path so Python can find 'selection'
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..','..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import time
 
@@ -19,13 +19,16 @@ import torch
 import torchtune.modules.common_utils as common_utils
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
+
+from datasets import load_dataset
+
 from torch import nn
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from torchtune import config, modules, training, utils
 from torchtune.config._utils import _get_component_from_path
 from torchtune.data import padded_collate_packed
-from torchtune.datasets import ConcatDataset
+from torchtune.datasets import ConcatDataset, instruct_dataset
 from torchtune.modules.peft import (
     get_adapter_params,
     set_trainable_params,
@@ -405,6 +408,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         log.info("Learning rate scheduler is initialized.")
         return lr_scheduler
 
+   
     def _setup_data(
         self,
         cfg_dataset: DictConfig,
@@ -413,19 +417,14 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         collate_fn: str,
     ) -> Tuple[DataLoader]:
         
-        
-        
-        if isinstance(cfg_dataset, ListConfig):
-            datasets = [
-                config.instantiate(single_cfg_dataset, self._tokenizer)
-                for single_cfg_dataset in cfg_dataset
-            ]
-            ds = ConcatDataset(datasets=datasets)
-            packed = False
-        else:
-            ds = config.instantiate(cfg_dataset, self._tokenizer)
-            packed = cfg_dataset.get("packed", False)
-
+         
+        ds = instruct_dataset(split="validation",
+                              tokenizer=self._tokenizer,
+                              source=cfg_dataset.source,
+                              data_dir=cfg_dataset.data_dir,
+                              column_map = {"input": "question", "output": "best_answer"})        
+       
+    
         # Instantiate collate_fn
         if "left_pad_sequence" in collate_fn:
             raise RuntimeError("left_pad_sequence collator is only for inference.")
@@ -442,8 +441,6 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                     padding_idx=self._tokenizer.pad_id,
                     ignore_idx=self._loss_fn.ignore_index,
                 )
-                if not packed
-                else padded_collate_packed
             ),
         )
 
@@ -821,7 +818,7 @@ def set_checkpoint_paths(cfg):
     return cfg
     
     
-def recipe_main(cfg: DictConfig = "less/config/llama3_2/step2_gradstore.yaml") -> None:
+def recipe_main(cfg: DictConfig = "less/config/llama3_2/step3.1_getvalidation_gradstore.yaml") -> None:
    
     cfg = OmegaConf.load(cfg)
     cfg = set_checkpoint_paths(cfg)
