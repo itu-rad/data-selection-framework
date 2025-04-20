@@ -587,6 +587,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             # Kwargs in ABC
             cfg_sampler,
             dataset=ds,
+            batch_size=batch_size,
             num_replicas=1,
             rank=0,
             shuffle=shuffle,

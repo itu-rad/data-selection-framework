@@ -24,11 +24,14 @@ class SelectiveSampler(DistributedSampler, ABC):
     - after_forward(idx, batch, current_loss): Called after forward pass with loss
     """
 
-    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True, seed=0):
+    def __init__(
+        self, dataset, batch_size=1, num_replicas=None, rank=None, shuffle=True, seed=0
+    ):
         super().__init__(
             dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed
         )
         self.mask = None
+        self.batch_size = batch_size
         self.no_grad_scoring = False
 
     def set_mask(self, mask):

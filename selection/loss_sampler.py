@@ -15,6 +15,7 @@ class LossSampler(SelectiveSampler):
     def __init__(
         self,
         dataset,
+        batch_size: int,
         loss_fn: torch.nn.Module,
         num_replicas=None,
         rank=None,
@@ -24,7 +25,12 @@ class LossSampler(SelectiveSampler):
         num_passes: float = -1,
     ):
         super().__init__(
-            dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed
+            dataset,
+            batch_size=batch_size,
+            num_replicas=num_replicas,
+            rank=rank,
+            shuffle=shuffle,
+            seed=seed,
         )
         self._per_sample_loss_fn = copy.deepcopy(loss_fn)
         if hasattr(self._per_sample_loss_fn, "reduction"):
@@ -39,13 +45,8 @@ class LossSampler(SelectiveSampler):
 
         self.num_passes = num_passes
         if self.num_passes == -1:
-            self.num_passes = 1300
-            # self.num_passes = math.ceil(len(dataset) * self.sampling_ratio)
-            print(
-                "\n\n\n\n\n\nDATASET SIZE!!!",
-                len(dataset),
-                "numpasses",
-                self.num_passes,
+            self.num_passes = math.ceil(
+                len(dataset) / self.batch_size * self.sampling_ratio
             )
         elif self.num_passes < 0:
             self.num_passes = math.ceil(1 / self.num_passes)
