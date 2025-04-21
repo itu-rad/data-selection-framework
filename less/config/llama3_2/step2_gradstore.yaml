@@ -17,14 +17,11 @@
 
 output_dir: ./less/gradstore/training_grads
 
-
+checkpoints: 0 1 2 3 # A list of which epochs to be used (epochs start from 0)
 gradient_projection_dimension: [8192]
 gradient_type: adam
 info_type : grads
 max_samples: null
-
-sampler:
-  _component_: 
 
 # Model Arguments
 model:
@@ -43,8 +40,7 @@ tokenizer:
 
 checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
-  checkpoint_dir: model_cache/less/warmup_models/llama3_2_1B/epoch_3
-                  
+  checkpoint_dir: model_cache/less/warmup_models/llama3_2_1B/ # Let this be the folder where the model's epochs are saved and set checkpoints to select which to use.      
   checkpoint_files: [
      ft-model-00001-of-00001.safetensors
   ]

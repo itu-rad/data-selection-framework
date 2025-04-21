@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 # import radt
+import csv
 import sys
 import os
 # Add the parent directory to sys.path so Python can find 'selection'
@@ -547,9 +548,15 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         t0 = time.perf_counter()
         running_loss = 0
         num_tokens = 0
-
+        avg_lr_epochs = []  # List to store learning rates
+        
         with self._profiler as prof:
                 for curr_epoch in range(self.epochs_run, self.total_epochs):
+                    
+                    learning_rates = []  # List to store learning rates
+                    # Append the initial learning rate at the start of each epoch
+                    learning_rates.append(self._optimizer.param_groups[0]["lr"])
+                    
                     # Update the sampler to ensure data is correctly shuffled across epochs
                     # in case shuffle is True
                     self._sampler.set_epoch(curr_epoch)
@@ -606,6 +613,9 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                             self._lr_scheduler.step()
                             # Update the number of steps when the weights are updated
                             self.global_step += 1
+                            
+                            # Append current learning rate after optimizer step
+                            learning_rates.append(self._optimizer.param_groups[0]["lr"])
 
                             loss_to_log = running_loss.item() / num_tokens
                             pbar.update(1)
@@ -656,6 +666,11 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
                     self._sampler.post_epoch()
                     
+                    # Calculate and log the average learning rate after all epochs
+                    if learning_rates:
+                        avg_lr = sum(learning_rates) / len(learning_rates)
+                        avg_lr_epochs.append(avg_lr)
+                    
                     self.epochs_run += 1
                     start_save_checkpoint = time.perf_counter()
                     log.info("Starting checkpoint save...")
@@ -666,6 +681,14 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                             time.perf_counter() - start_save_checkpoint
                         )
                     )
+                    
+                # Save the average learning rates for all epochs to a CSV file
+                dir = os.path.join(self._output_dir, "avg_lr_epochs.csv")
+                with open(dir, mode='w', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerow(["Epoch", "Average_Learning_Rate"])
+                    for epoch, avg_lr in enumerate(avg_lr_epochs):
+                        writer.writerow([epoch + 1, avg_lr])
 
     def cleanup(self) -> None:
         self._metric_logger.close()
