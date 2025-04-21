@@ -1,6 +1,7 @@
+import contextlib
 import copy
-import math
 import torch
+from torchtune import config, modules, training, utils
 from selection.selectivesampler import SelectiveSampler
 
 
@@ -31,39 +32,40 @@ class LossSampler(SelectiveSampler):
             rank=rank,
             shuffle=shuffle,
             seed=seed,
+            sampling_ratio=sampling_ratio,
+            num_passes=num_passes,
         )
         self._per_sample_loss_fn = copy.deepcopy(loss_fn)
         if hasattr(self._per_sample_loss_fn, "reduction"):
             self._per_sample_loss_fn.reduction = "none"
-        self.sampling_ratio = sampling_ratio
+
         # loss_buffer is a dict mapping dataset index -> accumulated loss and token count.
         self._loss_buffer = {}  # {sample_id: (loss_sum, valid_tokens)}
         self.mask = None  # Boolean tensor of size len(dataset)
         self.no_grad_scoring = True
-        self.sampling = False
-        self.sampling_indices = None
-
-        self.num_passes = num_passes
-        if self.num_passes == -1:
-            self.num_passes = math.ceil(
-                len(dataset) / self.batch_size * self.sampling_ratio
-            )
-        elif self.num_passes < 0:
-            self.num_passes = math.ceil(1 / self.num_passes)
 
     def pre_epoch(self) -> None:
-        self.sampling_indices = list(self.get_iterator())
-        self.test_see_if_all_indices = None
-
-    def post_epoch(self) -> None:
         pass
 
     def on_batch(self, idx: int, batch: dict) -> None:
-        # No action here; we use inform_logits() for scoring.
         pass
 
     def after_forward(self, idx: int, batch: dict, current_loss: float) -> None:
         pass
+
+    def on_scoring_phase(self) -> None:
+        """Hook called before each scoring phase. Must be implemented by subclasses."""
+        self._loss_buffer = {}
+
+    def score(self, recipe, idx, batch):
+        utils.batch_to_device(batch, recipe._device)
+        no_grad_mgr = (
+            torch.inference_mode() if self.no_grad_scoring else contextlib.nullcontext()
+        )
+        with no_grad_mgr:
+            logits, shifted_labels = recipe._forward_pass(batch)
+            sample_ids = batch["sample_ids"].tolist()
+            self.inform_logits(sample_ids, logits, shifted_labels)
 
     def inform_logits(
         self, sample_ids: list[int], logits: torch.Tensor, shifted_labels: torch.Tensor
@@ -92,7 +94,7 @@ class LossSampler(SelectiveSampler):
             else:
                 self._loss_buffer[sid] = (loss_val, count)
 
-    def sample(self) -> None:
+    def on_training_phase(self) -> None:
         """
         After the scoring pass, compute average loss per sample for all samples in _loss_buffer,
         compute selection probabilities, and update self.mask (Boolean tensor over dataset).
@@ -134,3 +136,6 @@ class LossSampler(SelectiveSampler):
         self.set_mask(mask)
 
         print(f"new mask sum = {sum(self.mask)}")
+
+    def post_epoch(self) -> None:
+        pass

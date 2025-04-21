@@ -4,7 +4,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import contextlib
 import radt
 import sys
 import time
@@ -732,6 +731,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 # in case shuffle is True
                 self._sampler.set_epoch(curr_epoch)
 
+                self._sampler._prepare_epoch()
                 self._sampler.pre_epoch()
 
                 # Encapsulate de training loop (1 en 2)
@@ -747,45 +747,41 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 # The scoring pass may not cover the entire epoch; in this case the two passes repeat.
                 # The amount of repetitions is determined by the sampler.
                 # Either by % of the dataset (e.g. 0.2 of the dataset for 5 passes) or total amount of passes.
-                for sample_epoch in range(self._sampler.num_passes):
-                    # ----- First Pass: Scoring Phase -----
+                for selection_pass in range(self._sampler.num_passes):
+                    # ----- 1: Scoring Phase -----
+                    self._sampler._prepare_scoring_phase(selection_pass)
+                    self._sampler.on_scoring_phase()
+                    self._set_steps_per_epoch()
                     utils.get_logger("DEBUG").info(
                         "Starting scoring pass %d for epoch %d",
-                        sample_epoch,
+                        selection_pass,
                         curr_epoch,
                     )
                     mlflow_dict = {
-                        "ML - sampling epoch": sample_epoch,
+                        "ML - sampling epoch": selection_pass,
                         "ML - sampling": 1,
                     }
                     run.log_metrics(mlflow_dict, epoch=curr_epoch)
 
-                    self._sampler.prepare_sampling_epoch(curr_epoch, sample_epoch)
-                    self._set_steps_per_epoch()
-                    pbar = tqdm(desc="Scoring", total=self._steps_per_epoch)
+                    pbar = tqdm(
+                        desc=f"Scoring: {curr_epoch + 1}.{selection_pass}",
+                        total=self._steps_per_epoch,
+                    )
                     for idx, batch in enumerate(self._dataloader):
-                        pbar.update(1)
-                        pbar.set_description(
-                            f"Scoring: {curr_epoch + 1}.{sample_epoch}|{idx}"
-                        )
-                        utils.batch_to_device(batch, self._device)
-                        no_grad_mgr = (
-                            torch.inference_mode()
-                            if self._sampler.no_grad_scoring
-                            else contextlib.nullcontext()
-                        )
-                        with no_grad_mgr:
-                            logits, shifted_labels = self._forward_pass(batch)
-                            sample_ids = batch["sample_ids"].tolist()
-                            self._sampler.inform_logits(
-                                sample_ids, logits, shifted_labels
-                            )
+                        if idx % 100 == 0:
+                            pbar.update(100)
+                        self._sampler.score(self, idx, batch)
 
-                    # ----- Second pass: Training phase (uses updated sampler mask) -----
+                    # ----- 2: Training phase (uses updated sampler mask) -----
                     run.log_metric("ML - sampling", 0, curr_epoch)
-                    self._sampler.prepare_training_epoch(curr_epoch, sample_epoch)
-                    self._sampler.sample()
+                    self._sampler._prepare_training_phase()
+                    self._sampler.on_training_phase()
                     self._set_steps_per_epoch()
+                    utils.get_logger("DEBUG").info(
+                        "Starting scoring pass %d for epoch %d",
+                        selection_pass,
+                        curr_epoch,
+                    )
 
                     # We need to re-setup the scheduler every epoch because the sampling changes `self._steps_per_epoch`
                     # Since we use `last_epoch` we don't lose state.
@@ -855,10 +851,13 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                             self.global_step += 1
 
                             loss_to_log = running_loss.item() / num_tokens
-                            pbar.update(1)
-                            pbar.set_description(
-                                f"Training: {curr_epoch + 1}.{sample_epoch}|Loss: {loss_to_log}"
-                            )
+
+                            if idx % 100 == 0:
+                                pbar.set_description(
+                                    f"Training: {curr_epoch + 1}.{selection_pass}|Loss: {loss_to_log:.3f}",
+                                    refresh=False,
+                                )
+                                pbar.update(100)
 
                             # Log per-step metrics
                             if self.global_step % self._log_every_n_steps == 0:

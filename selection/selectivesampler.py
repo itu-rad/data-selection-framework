@@ -1,3 +1,4 @@
+import math
 from abc import ABC, abstractmethod
 from torch.utils.data import DistributedSampler
 
@@ -25,7 +26,15 @@ class SelectiveSampler(DistributedSampler, ABC):
     """
 
     def __init__(
-        self, dataset, batch_size=1, num_replicas=None, rank=None, shuffle=True, seed=0
+        self,
+        dataset,
+        batch_size=1,
+        num_replicas=None,
+        rank=None,
+        shuffle=True,
+        seed=0,
+        sampling_ratio: float = 0.5,
+        num_passes=-1,
     ):
         super().__init__(
             dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed
@@ -33,6 +42,17 @@ class SelectiveSampler(DistributedSampler, ABC):
         self.mask = None
         self.batch_size = batch_size
         self.no_grad_scoring = False
+
+        self.sampling = False
+        self.sampling_indices = None
+        self.sampling_ratio = sampling_ratio
+        self.num_passes = num_passes
+        if self.num_passes == -1:
+            self.num_passes = math.ceil(
+                len(dataset) / self.batch_size * self.sampling_ratio
+            )
+        elif self.num_passes < 1:
+            self.num_passes = math.ceil(1 / self.num_passes)
 
     def set_mask(self, mask):
         """Set a boolean mask to filter samples"""
@@ -55,17 +75,6 @@ class SelectiveSampler(DistributedSampler, ABC):
 
         indices = [idx for idx in indices if self.mask[idx]]
 
-        if self.test_see_if_all_indices is None:
-            self.test_see_if_all_indices = [0] * len(self.dataset)
-
-        for idx in indices:
-            self.test_see_if_all_indices[idx] += 1
-
-        print("\n\n\n")
-        print("Max indices:", max(self.test_see_if_all_indices))
-        print("Min indices:", min(self.test_see_if_all_indices))
-        print("Sum indices:", sum(self.test_see_if_all_indices))
-
         if not indices:
             raise RuntimeError("No samples selected - mask may be all False or unset")
 
@@ -79,22 +88,20 @@ class SelectiveSampler(DistributedSampler, ABC):
             return sum(self.mask)
         return len(self.dataset)
 
-    def prepare_sampling_epoch(self, epoch, sample_epoch):
-        # Reset the loss buffer and mask at the start of each sample epoch.
-        self._loss_buffer = {}  # TODO: move
+    def _prepare_epoch(self):
+        self.sampling_indices = list(self.get_iterator())
+
+    def _prepare_scoring_phase(self, selection_pass):
+        # Reset the loss buffer and mask at the start of each scoring phase.
         n = len(self.dataset)
         mask = [True] * n
         self.sampling = True
-        self.sampling_start = sample_epoch * n // self.num_passes
-        self.sampling_end = (sample_epoch + 1) * n // self.num_passes
+        self.sampling_start = selection_pass * n // self.num_passes
+        self.sampling_end = (selection_pass + 1) * n // self.num_passes
 
-        # start = sample_epoch * n // self.num_passes
-        # end = (sample_epoch + 1) * n // self.num_passes
-        # mask[start:end] = [True] * (end - start)
-        # Set the mask to select a subset of samples for this sample epoch.
         self.set_mask(mask)
 
-    def prepare_training_epoch(self, epoch, sample_epoch):
+    def _prepare_training_phase(self):
         # Disable sampling mode
         self.sampling = False
 
@@ -108,8 +115,17 @@ class SelectiveSampler(DistributedSampler, ABC):
         pass
 
     @abstractmethod
-    def post_epoch(self) -> None:
-        """Hook called after each epoch ends. Must be implemented by subclasses."""
+    def on_scoring_phase(self) -> None:
+        """Hook called before each sampling phase. Must be implemented by subclasses."""
+        pass
+
+    @abstractmethod
+    def score(self, recipe, idx, batch):
+        pass
+
+    @abstractmethod
+    def on_training_phase(self) -> None:
+        """Hook called before each training phase. Must be implemented by subclasses."""
         pass
 
     @abstractmethod
@@ -134,17 +150,6 @@ class SelectiveSampler(DistributedSampler, ABC):
         pass
 
     @abstractmethod
-    def inform_logits(self, idx: int, batch: dict, current_loss: float) -> None:
-        """Hook called after model forward pass. Must be implemented by subclasses.
-
-        Args:
-            idx (int): The index/step number of the current batch
-            batch (dict): The batch data dictionary containing inputs and labels
-            current_loss (float): The loss value from the current forward pass
-        """
-        pass
-
-    @abstractmethod
-    def sample(self) -> None:
-        """Called after first phase forward pass in sample-then-batch"""
+    def post_epoch(self) -> None:
+        """Hook called after each epoch ends. Must be implemented by subclasses."""
         pass
