@@ -775,8 +775,9 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                                 pbar.update(100)
                             self._sampler.score(self, idx, batch)
 
-                    # ----- 2: Training phase (uses updated sampler mask) -----
                     run.log_metric("ML - sampling", 0, curr_epoch)
+
+                    # ----- 2: Training phase (uses updated sampler mask) -----
                     self._sampler._prepare_training_phase()
                     self._sampler.on_training_phase()
                     self._set_steps_per_epoch()
