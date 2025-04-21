@@ -10,14 +10,20 @@ class FullSampler(SelectiveSampler):
         mask = [True] * n
         self.set_mask(mask)
 
-    def post_epoch(self) -> None:
-        """No-op post epoch hook"""
+    def on_scoring_phase(self) -> None:
+        pass
+
+    def score(self, recipe, idx, batch):
+        pass
+
+    def on_training_phase(self) -> None:
         pass
 
     def on_batch(self, idx: int, batch: dict) -> None:
-        """No-op batch hook"""
         pass
 
     def after_forward(self, idx: int, batch: dict, current_loss: float) -> None:
-        """No-op after forward hook"""
+        pass
+
+    def post_epoch(self) -> None:
         pass

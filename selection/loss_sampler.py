@@ -43,6 +43,7 @@ class LossSampler(SelectiveSampler):
         self._loss_buffer = {}  # {sample_id: (loss_sum, valid_tokens)}
         self.mask = None  # Boolean tensor of size len(dataset)
         self.no_grad_scoring = True
+        self.has_scoring_phase = True
 
     def pre_epoch(self) -> None:
         pass

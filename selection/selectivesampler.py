@@ -43,6 +43,7 @@ class SelectiveSampler(DistributedSampler, ABC):
         self.batch_size = batch_size
         self.no_grad_scoring = False
 
+        self.has_scoring_phase = False
         self.sampling = False
         self.sampling_indices = None
         self.sampling_ratio = sampling_ratio
