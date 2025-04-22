@@ -734,14 +734,6 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 self._sampler._prepare_epoch()
                 self._sampler.pre_epoch()
 
-                # Encapsulate de training loop (1 en 2)
-                # draai step 1 daarna 2 daarna weer 1 etc.
-                # gebruik lijst van indices die visit
-                # ding is mix van beide; STB en BTS beide met buffer en dan release indices
-                # -1 indicates do as often as possible
-                # none after entire data
-                # 0-0.99 percentage
-
                 # Sampling epochs: The sampler generates a mask (subset) of the dataset to run batches on.
                 # This is done in two passes: first pass is scoring, second pass is training.
                 # The scoring pass may not cover the entire epoch; in this case the two passes repeat.
