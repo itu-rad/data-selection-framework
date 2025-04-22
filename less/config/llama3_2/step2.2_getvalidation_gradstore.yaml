@@ -1,27 +1,12 @@
-# Config for single device LoRA finetuning in lora_finetune_single_device.py
-# using a Llama3.2 1B Instruct model
-#
-# This config assumes that you've run the following command before launching
-# this run:
-#   tune download meta-llama/Llama-3.2-1B-Instruct --output-dir /tmp/Llama-3.2-1B-Instruct --ignore-patterns "original/consolidated.00.pth"
-#
-# To launch on a single device, run the following command from root:
-#   tune run lora_finetune_single_device --config llama3_2/1B_lora_single_device
-#
-# You can add specific overrides through the command line. For example
-# to override the checkpointer directory while launching training
-# you can run:
-#   tune run lora_finetune_single_device --config llama3_2/1B_lora_single_device checkpointer.checkpoint_dir=<YOUR_CHECKPOINT_DIR>
-#
-# This config works only for training on single device.
 
-output_dir: ./less/gradstore/training_grads
+model_name: llama3_2_1B_instruct
+output_dir: ./less/gradstore/${model_name}/validation_grads/
 
-
+checkpoints: [0,1,2,3] # A list of which epochs to be used (epochs start from 0)
 gradient_projection_dimension: [8192]
-gradient_type: adam
+gradient_type: SGD
 info_type : grads
-max_samples: null
+max_samples: 4
 
 sampler:
   _component_: 
@@ -43,7 +28,7 @@ tokenizer:
 
 checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
-  checkpoint_dir: model_cache/less/warmup_models/llama3_2_1B/epoch_3
+  checkpoint_dir: model_cache/less/warmup_models/llama3_2_1B/  # Let this be the folder where the model's epochs are saved and set checkpoints to select which to use.      
                   
   checkpoint_files: [
      ft-model-00001-of-00001.safetensors
@@ -56,10 +41,12 @@ resume_from_checkpoint: True # Must be True for LESS implementation since torcht
                              # this attribute to the optimizer state loading. 
 save_adapter_weights_only: False
 
-# Dataset and Sampler
+
+
 dataset:
-  _component_: torchtune.datasets.alpaca_cleaned_dataset
-  packed: False  # True increases speed
+  _component_: torchtune.datasets.instruct_dataset
+  source: truthfulqa/truthful_qa
+  data_dir: generation
 seed: null
 shuffle: True
 batch_size: 1 # LESS default = 1

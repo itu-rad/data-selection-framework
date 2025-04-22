@@ -4,10 +4,11 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import copy
 import sys
 import os
 # Add the parent directory to sys.path so Python can find 'selection'
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..','..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import time
 
@@ -799,6 +800,13 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         print(
             f"Saving the unnormalized {prefix} (Shape: {merged_data.shape}) to {output_file}.")
     
+def set_dataset_output_dir(cfg):
+    # Add dataset name to the output dir
+    component = cfg.dataset._component_
+    dataset = component.split('.')[-1]
+    cfg.output_dir = os.path.join(cfg.output_dir, f"{dataset}")
+    return cfg
+    
 def set_checkpoint_paths(cfg):
     # get current directory
     current_dir = os.getcwd()
@@ -812,26 +820,46 @@ def set_checkpoint_paths(cfg):
     print("Setting adapter_checkpoint config:", adapter_path)
     cfg.checkpointer.adapter_checkpoint = adapter_path
 
+
     # dynamically set recipe state path
-    checkpoint_parent_dir = os.path.dirname(checkpoint_dir)
     recipe_state_file =cfg.checkpointer.recipe_checkpoint
-    recipe_state_path = os.path.join(current_dir, checkpoint_parent_dir, "recipe_state",recipe_state_file)
+    recipe_state_path = os.path.join(current_dir,checkpoint_dir,recipe_state_file)
     print("Setting recipe_checkpoint path in config:", recipe_state_path)
     cfg.checkpointer.recipe_checkpoint = recipe_state_path
+    
     return cfg
-    
-    
-def recipe_main(cfg: DictConfig = "less/config/llama3_2/step2_gradstore.yaml") -> None:
-   
-    cfg = OmegaConf.load(cfg)
-    cfg = set_checkpoint_paths(cfg)
-    
-    config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
-    recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
-    recipe.setup(cfg=cfg)
-    recipe.collect_grads(cfg=cfg)
 
-    recipe.cleanup()
+def multiple_checkpoints(cfg):
+    # Create a DictConfig for each individual checkpoint
+    
+    cfgs = [] # A list to keep all the configs for each checkpoint
+    for ckpt in cfg.checkpoints:
+        
+        # Make a deepcopy of the configuration to avoid modifying the original `cfg`
+        new_cfg = copy.deepcopy(cfg)
+        
+        # Add current ckpt to the checkpoint dir in the new config
+        new_cfg.checkpointer.checkpoint_dir = os.path.join(new_cfg.checkpointer.checkpoint_dir, f'epoch_{ckpt}')
+        
+        # Add current ckpt to the output dir in the new config
+        new_cfg.output_dir = os.path.join(new_cfg.output_dir, f'epoch_{ckpt}')
+        
+        cfgs.append(new_cfg)
+    return cfgs 
+    
+def recipe_main(cfg: DictConfig = "less/config/llama3_2/step2.1_gettraining_gradstore.yaml") -> None:
+    cfg = OmegaConf.load(cfg)
+    cfg = set_dataset_output_dir(cfg)
+     
+    cfgs = multiple_checkpoints(cfg) if cfg.checkpoints is not None else [cfg]
+    
+    for cfg in cfgs:
+        cfg = set_checkpoint_paths(cfg)
+        config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
+        recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
+        recipe.setup(cfg=cfg)
+        recipe.collect_grads(cfg=cfg)
+        recipe.cleanup()
 
 
 if __name__ == "__main__":

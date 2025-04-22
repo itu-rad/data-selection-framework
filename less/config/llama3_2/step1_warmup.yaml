@@ -1,4 +1,5 @@
-output_dir: model_cache/less/warmup_models/llama3_2_1B
+model_name: llama3_2_1B_instruct
+output_dir: model_cache/less/warmup_models/${model_name}/
 
 sampler:
   _component_: selection.PercentageBasedSampler
