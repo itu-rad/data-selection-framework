@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import copy
 import sys
 import os
 # Add the parent directory to sys.path so Python can find 'selection'
@@ -19,16 +20,13 @@ import torch
 import torchtune.modules.common_utils as common_utils
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
-
-from datasets import load_dataset
-
 from torch import nn
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from torchtune import config, modules, training, utils
 from torchtune.config._utils import _get_component_from_path
 from torchtune.data import padded_collate_packed
-from torchtune.datasets import ConcatDataset, instruct_dataset
+from torchtune.datasets import ConcatDataset
 from torchtune.modules.peft import (
     get_adapter_params,
     set_trainable_params,
@@ -408,7 +406,6 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         log.info("Learning rate scheduler is initialized.")
         return lr_scheduler
 
-   
     def _setup_data(
         self,
         cfg_dataset: DictConfig,
@@ -417,14 +414,19 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         collate_fn: str,
     ) -> Tuple[DataLoader]:
         
-         
-        ds = instruct_dataset(split="validation",
-                              tokenizer=self._tokenizer,
-                              source=cfg_dataset.source,
-                              data_dir=cfg_dataset.data_dir,
-                              column_map = {"input": "question", "output": "best_answer"})        
-       
-    
+        
+        
+        if isinstance(cfg_dataset, ListConfig):
+            datasets = [
+                config.instantiate(single_cfg_dataset, self._tokenizer)
+                for single_cfg_dataset in cfg_dataset
+            ]
+            ds = ConcatDataset(datasets=datasets)
+            packed = False
+        else:
+            ds = config.instantiate(cfg_dataset, self._tokenizer)
+            packed = cfg_dataset.get("packed", False)
+
         # Instantiate collate_fn
         if "left_pad_sequence" in collate_fn:
             raise RuntimeError("left_pad_sequence collator is only for inference.")
@@ -441,6 +443,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                     padding_idx=self._tokenizer.pad_id,
                     ignore_idx=self._loss_fn.ignore_index,
                 )
+                if not packed
+                else padded_collate_packed
             ),
         )
 
@@ -796,6 +800,13 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         print(
             f"Saving the unnormalized {prefix} (Shape: {merged_data.shape}) to {output_file}.")
     
+def set_dataset_output_dir(cfg):
+    # Add dataset name to the output dir
+    component = cfg.dataset._component_
+    dataset = component.split('.')[-1]
+    cfg.output_dir = os.path.join(cfg.output_dir, f"{dataset}")
+    return cfg
+    
 def set_checkpoint_paths(cfg):
     # get current directory
     current_dir = os.getcwd()
@@ -809,26 +820,46 @@ def set_checkpoint_paths(cfg):
     print("Setting adapter_checkpoint config:", adapter_path)
     cfg.checkpointer.adapter_checkpoint = adapter_path
 
+
     # dynamically set recipe state path
-    checkpoint_parent_dir = os.path.dirname(checkpoint_dir)
     recipe_state_file =cfg.checkpointer.recipe_checkpoint
-    recipe_state_path = os.path.join(current_dir, checkpoint_parent_dir, "recipe_state",recipe_state_file)
+    recipe_state_path = os.path.join(current_dir,checkpoint_dir,recipe_state_file)
     print("Setting recipe_checkpoint path in config:", recipe_state_path)
     cfg.checkpointer.recipe_checkpoint = recipe_state_path
+    
     return cfg
-    
-    
-def recipe_main(cfg: DictConfig = "less/config/llama3_2/step3.1_getvalidation_gradstore.yaml") -> None:
-   
-    cfg = OmegaConf.load(cfg)
-    cfg = set_checkpoint_paths(cfg)
-    
-    config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
-    recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
-    recipe.setup(cfg=cfg)
-    recipe.collect_grads(cfg=cfg)
 
-    recipe.cleanup()
+def multiple_checkpoints(cfg):
+    # Create a DictConfig for each individual checkpoint
+    
+    cfgs = [] # A list to keep all the configs for each checkpoint
+    for ckpt in cfg.checkpoints:
+        
+        # Make a deepcopy of the configuration to avoid modifying the original `cfg`
+        new_cfg = copy.deepcopy(cfg)
+        
+        # Add current ckpt to the checkpoint dir in the new config
+        new_cfg.checkpointer.checkpoint_dir = os.path.join(new_cfg.checkpointer.checkpoint_dir, f'epoch_{ckpt}')
+        
+        # Add current ckpt to the output dir in the new config
+        new_cfg.output_dir = os.path.join(new_cfg.output_dir, f'epoch_{ckpt}')
+        
+        cfgs.append(new_cfg)
+    return cfgs 
+    
+def recipe_main(cfg: DictConfig = "less/config/llama3_2/step2.1_gettraining_gradstore.yaml") -> None:
+    cfg = OmegaConf.load(cfg)
+    cfg = set_dataset_output_dir(cfg)
+     
+    cfgs = multiple_checkpoints(cfg) if cfg.checkpoints is not None else [cfg]
+    
+    for cfg in cfgs:
+        cfg = set_checkpoint_paths(cfg)
+        config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
+        recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
+        recipe.setup(cfg=cfg)
+        recipe.collect_grads(cfg=cfg)
+        recipe.cleanup()
 
 
 if __name__ == "__main__":

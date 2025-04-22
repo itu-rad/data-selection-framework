@@ -17,6 +17,8 @@ from functools import partial
 from typing import Any, Dict, Optional, Tuple, Union
 from warnings import warn
 
+import shutil
+import os 
 import torch
 import torchtune.modules.common_utils as common_utils
 from omegaconf import DictConfig, ListConfig, OmegaConf
@@ -213,7 +215,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         self._optimizer = self._setup_optimizer(
             cfg_optimizer=cfg.optimizer,
-            opt_state_dict=(checkpoint_dict[training.OPT_KEY] if self._resume_from_checkpointelse else None),
+            opt_state_dict=(checkpoint_dict[training.OPT_KEY] if self._resume_from_checkpoint else None),
         )
 
         # initialize loss
@@ -464,7 +466,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
        
         ckpt_dict = {}
 
-        intermediate_checkpoint = epoch + 1 < self.total_epochs
+        intermediate_checkpoint = True # Always save every checkpoint
         # if training is in-progress, checkpoint the optimizer state as well
         if intermediate_checkpoint:
             ckpt_dict.update(
@@ -514,6 +516,12 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             intermediate_checkpoint=intermediate_checkpoint,
             adapter_only=self._save_adapter_weights_only,
         )
+        
+    def save_recipe_state(self,epoch):
+        src_path = os.path.join(self._output_dir, "recipe_state/recipe_state.pt")
+        dst_path = os.path.join(self._output_dir, f"epoch_{epoch}/recipe_state.pt")
+        shutil.copy(src_path, dst_path)
+
 
     def _loss_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         # Shape [b, s], needed for the loss not the model
@@ -675,7 +683,17 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                     start_save_checkpoint = time.perf_counter()
                     log.info("Starting checkpoint save...")
                     # self.save_checkpoint(run=run, epoch=curr_epoch)
+                    
+                    # Update the recipe state
                     self.save_checkpoint(epoch=curr_epoch)
+                    # Save the current recipe state for the current epoch, at each epoch path
+                    
+                    # In LESS we want to save the optimizer state for every epoch
+                    self.save_recipe_state(epoch=curr_epoch)
+                    
+                    
+                    
+                    
                     log.info(
                         "Checkpoint saved in {:.2f} seconds.".format(
                             time.perf_counter() - start_save_checkpoint

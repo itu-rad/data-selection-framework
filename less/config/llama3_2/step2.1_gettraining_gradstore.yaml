@@ -14,17 +14,14 @@
 #   tune run lora_finetune_single_device --config llama3_2/1B_lora_single_device checkpointer.checkpoint_dir=<YOUR_CHECKPOINT_DIR>
 #
 # This config works only for training on single device.
+model_name: llama3_2_1B_instruct
+output_dir: ./less/gradstore/${model_name}/training_grads
 
-output_dir: ./less/gradstore/validation_grads
-
-
+checkpoints: [0,1,2,3] # A list of which epochs to be used (epochs start from 0)
 gradient_projection_dimension: [8192]
-gradient_type: SGD
+gradient_type: adam
 info_type : grads
-max_samples: null
-
-sampler:
-  _component_: 
+max_samples: 4
 
 # Model Arguments
 model:
@@ -43,8 +40,7 @@ tokenizer:
 
 checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
-  checkpoint_dir: model_cache/less/warmup_models/llama3_2_1B/epoch_3
-                  
+  checkpoint_dir: model_cache/less/warmup_models/llama3_2_1B/  # Let this be the folder where the model's epochs are saved and set checkpoints to select which to use.      
   checkpoint_files: [
      ft-model-00001-of-00001.safetensors
   ]
@@ -56,12 +52,10 @@ resume_from_checkpoint: True # Must be True for LESS implementation since torcht
                              # this attribute to the optimizer state loading. 
 save_adapter_weights_only: False
 
-
-
+# Dataset and Sampler
 dataset:
-  _component_: torchtune.datasets.instruct_dataset
-  source: truthfulqa/truthful_qa
-  data_dir: generation
+  _component_: torchtune.datasets.alpaca_cleaned_dataset
+  packed: False  # True increases speed
 seed: null
 shuffle: True
 batch_size: 1 # LESS default = 1

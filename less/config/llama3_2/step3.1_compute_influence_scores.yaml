@@ -1,0 +1,55 @@
+
+
+
+
+
+output_dir=./less/influence_scores
+checkpoints: [0,1,2,3]
+gradient_projection_dimension: [8192]
+
+training_gradient_path: None # Create individual configs for each epoch and reassign training_gradient_path. 
+train_file_names: None # Used for calculating influence scores for several trainingsets. 
+max_samples: null
+
+
+#data-selection-framework/less/gradstore/training_grads
+TRAINING_GRADIENT_PATH=../grads/llama2-7b-p0.05-lora-seed3/{}-ckpt{}-adam/dim${DIM}
+
+#data-selection-framework/less/gradstore/validation_grads
+VALIDATION_GRADIENT_PATH=../grads/llama2-7b-p0.05-lora-seed3/{}-ckpt{}-sgd/dim${DIM}
+
+
+TRAIN_FILE_NAMES="flan_v2 cot dolly oasst1"
+
+
+CKPTS=[0,1,2,3]
+
+# Pipe or manually put in computed average LR of epochs 
+CHECKPOINT_WEIGHTS="1.6877e-05 1.2859e-05 7.7030e-06 2.5616e-06" # average lr of the epoch
+
+
+TARGET_TASK_NAMES= truthful_qa
+
+
+
+
+./less/scripts/data_selection/matching.sh "$GRADIENT_PATH" "$TRAIN_FILE_NAMES" "$CKPTS" "$CHECKPOINT_WEIGHTS" "$VALIDATION_GRADIENT_PATH" "$TARGET_TASK_NAMES" "$SELECTED_DATA_OUTPUT_PATH"
+
+
+
+# argparser = argparse.ArgumentParser(
+#     description=data for training')
+# argparser.add_argument('--gradient_path', type=str, default="{} ckpt{}",
+#                        help='The path to the gradient file')
+# argparser.add_argument('--train_file_names', type=str, nargs='+',
+#                        help='The name of the training file')
+# argparser.add_argument('--ckpts', type=int, nargs='+',
+#                        help="Checkpoint numbers.")
+# argparser.add_argument('--checkpoint_weights', type=float, nargs='+',
+#                        help="checkpoint weights")
+# argparser.add_argument('--target_task_names', type=str,
+#                        nargs='+', help="The name of the target tasks")
+# argparser.add_argument('--validation_gradient_path', type=str,
+#                        default="{} ckpt{}", help='The path to the validation gradient file')
+# argparser.add_argument('--output_path', type=str, default="selected_data",
+#                        help='The path to the output')
