@@ -1,6 +1,9 @@
 import argparse
 import os
 import sys
+import csv
+import yaml
+
 
 from omegaconf import DictConfig, OmegaConf
 import torch
@@ -25,7 +28,7 @@ argparser.add_argument('--output_path', type=str, default="selected_data",
 
 args = argparser.parse_args()
 
-N_SUBTASKS = {"mmlu": 57, "bbh": 27, "tydiqa": 9}
+N_SUBTASKS = {"mmlu": 57, "bbh": 27, "tydiqa": 9,"truthful_qa":1}
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -43,53 +46,73 @@ def calculate_influence_score(training_info: torch.Tensor, validation_info: torc
         training_info, validation_info.transpose(0, 1))
     return influence_scores
 
-def matching(cfg: DictConfig = "less/config/llama3_2/step3.2_matching.yaml") -> None:
-    cfg = OmegaConf.load(cfg)
+def renormalize_avg_lr(cfg) -> None:
     # renormalize the checkpoint weights
-    if sum(args.checkpoint_weights) != 1:
-        s = sum(args.checkpoint_weights)
-        args.checkpoint_weights = [i/s for i in args.checkpoint_weights]
+    if sum(cfg.checkpoint_avg_lr) != 1:
+        s = sum(cfg.checkpoint_avg_lr)
+        cfg.checkpoint_avg_lr = [i/s for i in cfg.checkpoint_avg_lr]
     
-    # calculate the influence score for each validation task
-    for target_task_name in args.target_task_names:
-        for train_file_name in args.train_file_names:
+    
+    
+def indtilvidere(cfg):
+    # calculate the influence score for each training dataset for each validation task
+    for train_file_name in cfg.train_file_names:
+        for validation_task in cfg.validation_task_name :
             influence_score = 0
-            for i, ckpt in enumerate(args.ckpts):
-                # validation_path = args.validation_gradient_path.format(
-                # target_task_name, ckpt)
-                validation_path = args.validation_gradient_path.format(
-                    ckpt, target_task_name)
-                if os.path.isdir(validation_path):
-                    validation_path = os.path.join(validation_path, "all_orig.pt")
+            for i, ckpt in enumerate(cfg.checkpoints):
+                
+                # load training gradients 
+                training_path = os.path.join(cfg.training_gradient_path,train_file_name,f"epoch_{ckpt}",f"dim{cfg.gradient_projection_dimension}","all_orig.pt")
+                training_info = torch.load(training_path)
+                    
+                if not torch.is_tensor(training_info):
+                    training_info = torch.tensor(training_info)
+                training_info = training_info.to(device).float()
+    
+    
+                # load validation gradients
+                validation_path = os.path.join(cfg.validation_gradient_path,validation_task,f"epoch_{ckpt}",f"dim{cfg.gradient_projection_dimension}","all_orig.pt")
                 validation_info = torch.load(validation_path)
     
                 if not torch.is_tensor(validation_info):
                     validation_info = torch.tensor(validation_info)
                 validation_info = validation_info.to(device).float()
-                # gradient_path = args.gradient_path.format(train_file_name, ckpt)
-                gradient_path = args.gradient_path.format(ckpt, train_file_name)
-                if os.path.isdir(gradient_path):
-                    gradient_path = os.path.join(gradient_path, "all_orig.pt")
-                training_info = torch.load(gradient_path)
     
-                if not torch.is_tensor(training_info):
-                    training_info = torch.tensor(training_info)
-                training_info = training_info.to(device).float()
     
-                influence_score += args.checkpoint_weights[i] * \
-                    calculate_influence_score(
-                        training_info=training_info, validation_info=validation_info)
-            influence_score = influence_score.reshape(
-                influence_score.shape[0], N_SUBTASKS[target_task_name], -1).mean(-1).max(-1)[0]
-            output_dir = os.path.join(args.output_path, target_task_name)
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-            output_file = os.path.join(
-                args.output_path, target_task_name, f"{train_file_name}_influence_score.pt")
+                
+                influence_score += cfg.checkpoint_avg_lr[i] * calculate_influence_score(
+                training_info=training_info, validation_info=validation_info)
+                
+            influence_score = influence_score.reshape(influence_score.shape[0], N_SUBTASKS[target_task_name], -1).mean(-1).max(-1)[0]
+            
+            
+            
+            output_dir = os.path.join(cfg.output_dir, target_task_name)
+            
+            output_file = os.path.join(cfg.output_dir, target_task_name, f"{train_file_name}_influence_score.pt")
             torch.save(influence_score, output_file)
-            print("Saved influence score to {}".format(output_file))
+            print(f"Saved influence score to {output_file}")
 
 
+
+def get_avg_lr_csv(cfg): 
+    avg_lr_path = cfg.avg_lr_path
+    
+    with open(avg_lr_path, newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        learning_rates = [float(row['Average_Learning_Rate']) for row in reader]
+    
+    checkpoint_avg_lr = learning_rates
+    cfg.checkpoint_avg_lr = checkpoint_avg_lr
+    
+def recipe_main(cfg: DictConfig = "less/config/llama3_2/step3.1_compute_influence_scores.yaml"):
+    
+    cfg = OmegaConf.load(cfg)
+    indtilvidere(cfg)
+    get_avg_lr_csv(cfg)
+ 
+    
+    
     
 if __name__ == "__main__":
-    sys.exit(matching())
+    sys.exit(recipe_main())

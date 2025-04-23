@@ -1,4 +1,3 @@
-
 model_name: llama3_2_1B_instruct
 output_dir: ./less/gradstore/${model_name}/validation_grads/
 
@@ -8,8 +7,6 @@ gradient_type: SGD
 info_type : grads
 max_samples: 4
 
-sampler:
-  _component_: 
 
 # Model Arguments
 model:
