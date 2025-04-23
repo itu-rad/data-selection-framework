@@ -44,8 +44,15 @@ dataset:
   _component_: torchtune.datasets.instruct_dataset
   source: truthfulqa/truthful_qa
   data_dir: generation
+  split: validation
+  # specify the columns for _setup_data() in step 2.2_getvalidation_gradstore.py
+  subtask_column: category
+  input_column: question
+  output_column: best_answer
 seed: null
 shuffle: True
+
+  
 batch_size: 1 # LESS default = 1
 
 # Optimizer and Scheduler

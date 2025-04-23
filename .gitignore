@@ -171,10 +171,11 @@ cython_debug/
 .pypirc
 
 # Ignored folders
+
 /model_cache/
 /mlruns/
 /less/gradstore/
 /less/influence_scores
-
+/less/cache_dir
 # radT environment init
 environment.sh

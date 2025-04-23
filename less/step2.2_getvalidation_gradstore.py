@@ -19,9 +19,7 @@ from warnings import warn
 import torch
 import torchtune.modules.common_utils as common_utils
 from omegaconf import DictConfig, ListConfig, OmegaConf
-
-
-from datasets import load_dataset
+from datasets import Dataset, load_from_disk, load_dataset
 
 from torch import nn
 from torch.optim import Optimizer
@@ -245,7 +243,6 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         collate_name = cfg.get("collate_fn", "torchtune.data.padded_collate_sft")
         self._dataloader = self._setup_data(
             cfg_dataset=cfg.dataset,
-            shuffle=cfg.shuffle,
             batch_size=cfg.batch_size,
             collate_fn=collate_name,
         )
@@ -409,23 +406,71 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         log.info("Learning rate scheduler is initialized.")
         return lr_scheduler
 
-   
+    
+    
     def _setup_data(
         self,
-        cfg_dataset: DictConfig,
-        shuffle: bool,
+        cfg_dataset: DictConfig, 
         batch_size: int,
         collate_fn: str,
     ) -> Tuple[DataLoader]:
-        
-         
-        ds = instruct_dataset(split="validation",
-                              tokenizer=self._tokenizer,
-                              source=cfg_dataset.source,
-                              data_dir=cfg_dataset.data_dir,
-                              column_map = {"input": "question", "output": "best_answer"})        
-       
     
+        
+        def preprocess_ds(subtask_column,ds_path,data_dir,split): 
+    
+
+            ds = load_dataset(path=ds_path, data_dir=data_dir, split=split)
+              
+            # To store one example per subtask
+            unique_examples = {}
+            for example in ds:
+                subtask = example[subtask_column]
+                if subtask not in unique_examples:
+                    unique_examples[subtask] = example
+                # Stop if we've found one for each subtask
+                if len(unique_examples) == len(set(ds[subtask_column])):
+                    break
+                 
+            # Convert your values (the filtered examples) into a list
+            examples = list(unique_examples.values())
+            # Create a new Hugging Face dataset from the list
+            mini_ds = Dataset.from_list(examples)
+            
+            try: 
+                assert len(mini_ds) == len(set(ds[subtask_column]))
+                print(f"mini dataset has the correct length")
+                print(f"Length of mini dataset:{len(mini_ds)}")
+                print(f"Expected length:{len(set(ds[subtask_column]))}")
+
+            except AssertionError: 
+                print(f"{mini_ds} does not have the expected length!")
+                print(f"Length of mini dataset:{len(mini_ds)}")
+                print(f"Expected length:{len(set(ds[subtask_column]))}")
+                sys.exit()
+            
+            # Dynamically save mini_ds as .json to cache dir based on cfg_dataset
+            cache_dir_path = "less/cache_dir"
+            mini_ds_name = cfg_dataset.source.split("/")[-1]
+            mini_ds_path= os.path.join(cache_dir_path,mini_ds_name+".json")
+            
+            print(f"Saving mini_ds as Json to {mini_ds_path}")
+            mini_ds.to_json(f"{mini_ds_path}", orient="records", lines=True)
+            
+            return mini_ds_path
+                
+           
+    
+        mini_ds_path = preprocess_ds(cfg_dataset.subtask_column,cfg_dataset.source,cfg_dataset.data_dir,cfg_dataset.split)
+        
+                
+
+        ds = instruct_dataset(tokenizer=self._tokenizer,
+                              source="json",
+                              data_files=mini_ds_path,
+                              column_map = {"input": cfg_dataset.input_column, "output": cfg_dataset.output_column})
+        
+        
+        
         # Instantiate collate_fn
         if "left_pad_sequence" in collate_fn:
             raise RuntimeError("left_pad_sequence collator is only for inference.")
@@ -845,7 +890,8 @@ def set_checkpoint_paths(cfg):
     
     
 def recipe_main(cfg: DictConfig = "less/config/llama3_2/step2.2_getvalidation_gradstore.yaml") -> None:
-   
+    
+    
     cfg = OmegaConf.load(cfg)
     cfg = set_dataset_output_dir(cfg)
      
