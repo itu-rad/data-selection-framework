@@ -1,0 +1,129 @@
+Running on cn4.hpc.itu.dk:
+Fri Apr 25 12:21:22 2025       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 560.35.03              Driver Version: 560.35.03      CUDA Version: 12.6     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-PCIE-32GB           On  |   00000000:40:00.0 Off |                    0 |
+| N/A   45C    P0             43W /  250W |       1MiB /  32768MiB |     59%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Ignoring files matching the following patterns: original/consolidated.00.pth
+Successfully downloaded model repo and wrote to the following locations:
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/.cache
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/.gitattributes
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/LICENSE.txt
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/README.md
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/USE_POLICY.md
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/config.json
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/generation_config.json
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/model.safetensors
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/original
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/special_tokens_map.json
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/tokenizer.json
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/tokenizer_config.json
+/home/dsep/data-selection-framework/model_cache/downloaded_models/Llama-3.2-1B-Instruct#/original_repo_id.json
+Starting finetuning...
+/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/radt/schedule/schedule.py:514: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise an error in a future version of pandas. Value 'A' has dtype incompatible with int64, please explicitly cast to a compatible dtype first.
+  df_workload.loc[i, "Number"] = ascii_uppercase[
+[33mExecuting command - ['echo quit | nvidia-cuda-mps-control'][0m
+Cannot find MPS control daemon process
+[33mExecuting command - ['nvidia-smi', '-L'][0m
+[33mExecuting command - ['dcgmi', 'group', '-l'][0m
+[33mExecuting command - ['dcgmi', 'group', '-d', '11'][0m
+[33mExecuting command - ['dcgmi', 'group', '-c', 'mldnn_0'][0m
+[33mExecuting command - ['dcgmi', 'group', '-g', '12', '-a', '0'][0m
+[33mRUNNING WORKLOAD: 137+0[0m
+[31m[RUN 0]:            [0m context: 0-31-0-{'MLFLOW_EXPERIMENT_ID': '137', 'CUDA_VISIBLE_DEVICES': 'GPU-b01d15fe-3799-e83e-0c4f-f5fe88074f38', 'RADT_DCGMI_GROUP': '12', 'SMI_GPU_ID': '0', 'RADT_MAX_EPOCH': '5', 'RADT_MAX_TIME': '172800', 'RADT_MANUAL_MODE': 'True', 'ps': 'False', 'smi': 'False', 'dcgmi': 'False', 'top': 'False', 'iostat': 'False', 'free': 'False', 'RADT_LISTENER_SMI': 'True', 'RADT_LISTENER_TOP': 'True', 'RADT_LISTENER_DCGMI': 'True', 'RADT_LISTENER_IOSTAT': 'True', 'RADT_LISTENER_FREE': 'True'}-['mlflow', 'run', '/home/dsep/data-selection-framework', '--env-manager=local', '-P', 'letter=0', '-P', 'workload=0', '-P', 'listeners=smi+top+dcgmi+iostat+free', '-P', 'file=tune.py', '-P', 'params="-"', '-P', 'workload_listener=']-/home/dsep/data-selection-framework
+[31m[RUN 0]:            [0m 2025/04/25 12:21:43 INFO mlflow.projects.utils: === Created directory /tmp/tmpafrra0ni for downloading remote URIs passed to arguments of type 'path' ===
+[31m[RUN 0]:            [0m 2025/04/25 12:21:43 INFO mlflow.projects.backend.local: === Running command 'python -m radt run -l smi+top+dcgmi+iostat+free -c tune.py -p "run less/recipe/test_full_finetune.py --config hpc/config/SingleSampler_train.yaml"
+[31m[RUN 0]:            [0m ' in run with ID '487f0ef45cf64ff197441ab6b802ddff' === 
+[31m[RUN 0]:            [0m MAPPED TO 487f0ef45cf64ff197441ab6b802ddff
+[31m[RUN 0]:            [0m Traceback (most recent call last):
+[31m[RUN 0]:            [0m   File "<frozen runpy>", line 198, in _run_module_as_main
+[31m[RUN 0]:            [0m   File "<frozen runpy>", line 88, in _run_code
+[31m[RUN 0]:            [0m   File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/radt/__main__.py", line 4, in <module>
+[31m[RUN 0]:            [0m     cli()
+[31m[RUN 0]:            [0m   File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/radt/radt.py", line 185, in cli
+[31m[RUN 0]:            [0m     cli_run()
+[31m[RUN 0]:            [0m   File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/radt/radt.py", line 179, in cli_run
+[31m[RUN 0]:            [0m     start_run(args, listeners)
+[31m[RUN 0]:            [0m   File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/radt/run/run.py", line 83, in start_run
+[31m[RUN 0]:            [0m     exec(code, globs, None)
+[31m[RUN 0]:            [0m   File "<string>", line 1, in <module>
+[31m[RUN 0]:            [0m   File "<frozen runpy>", line 287, in run_path
+[31m[RUN 0]:            [0m   File "<frozen runpy>", line 98, in _run_module_code
+[31m[RUN 0]:            [0m   File "<frozen runpy>", line 88, in _run_code
+[31m[RUN 0]:            [0m   File "tune.py", line 5, in <module>
+[31m[RUN 0]:            [0m     main()
+[31m[RUN 0]:            [0m   File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/_cli/tune.py", line 49, in main
+[31m[RUN 0]:            [0m     parser.run(args)
+[31m[RUN 0]:            [0m   File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/_cli/tune.py", line 43, in run
+[31m[RUN 0]:            [0m     args.func(args)
+[31m[RUN 0]:            [0m   File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/_cli/run.py", line 214, in _run_cmd
+[31m[RUN 0]:            [0m     self._run_single_device(args, is_builtin=is_builtin)
+[31m[RUN 0]:            [0m   File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/_cli/run.py", line 111, in _run_single_device
+[31m[RUN 0]:            [0m     runpy.run_module(str(args.recipe), run_name="__main__")
+[31m[RUN 0]:            [0m   File "<frozen runpy>", line 229, in run_module
+[31m[RUN 0]:            [0m   File "<frozen runpy>", line 88, in _run_code
+[31m[RUN 0]:            [0m   File "/home/dsep/data-selection-framework/less/recipe/test_full_finetune.py", line 853, in <module>
+[31m[RUN 0]:            [0m     sys.exit(recipe_main())
+[31m[RUN 0]:            [0m              ^^^^^^^^^^^^^
+[31m[RUN 0]:            [0m   File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/config/_parse.py", line 96, in wrapper
+[31m[RUN 0]:            [0m     yaml_args, cli_args = parser.parse_known_args()
+[31m[RUN 0]:            [0m                           ^^^^^^^^^^^^^^^^^^^^^^^^^
+[31m[RUN 0]:            [0m   File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/config/_parse.py", line 58, in parse_known_args
+[31m[RUN 0]:            [0m     config = OmegaConf.load(namespace.config)
+[31m[RUN 0]:            [0m              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[31m[RUN 0]:            [0m   File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/omegaconf/omegaconf.py", line 189, in load
+[31m[RUN 0]:            [0m     with io.open(os.path.abspath(file_), "r", encoding="utf-8") as f:
+[31m[RUN 0]:            [0m          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[31m[RUN 0]:            [0m FileNotFoundError: [Errno 2] No such file or directory: '/home/dsep/data-selection-framework/hpc/config/SingleSampler_train.yaml'
+[31m[RUN 0]:            [0m Failed to log parameter: params run less/recipe/test_full_finetune.py --config hpc/config/SingleSampler_train.yaml
+[31m[RUN 0]:            [0m 🏃 View run (0 0) likeable-skink-108 at: https://res17.itu.dk/#/experiments/137/runs/487f0ef45cf64ff197441ab6b802ddff
+[31m[RUN 0]:            [0m 🧪 View experiment at: https://res17.itu.dk/#/experiments/137
+[31m[RUN 0]:            [0m 2025/04/25 12:21:55 ERROR mlflow.cli: === Run (ID '487f0ef45cf64ff197441ab6b802ddff') failed ===
+[31m[RUN 0]:            [0m 🏃 View run (0 0) likeable-skink-108 at: https://res17.itu.dk/#/experiments/137/runs/487f0ef45cf64ff197441ab6b802ddff
+[31m[RUN 0]:            [0m 🧪 View experiment at: https://res17.itu.dk/#/experiments/137
+[33mSending logs to server.[0m
+[33mExecuting command - ['echo quit | nvidia-cuda-mps-control'][0m
+Cannot find MPS control daemon process
+Starting evaluation of model(s)...
+Traceback (most recent call last):
+  File "/home/dsep/miniconda3/envs/selection/bin/tune", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/_cli/tune.py", line 49, in main
+    parser.run(args)
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/_cli/tune.py", line 43, in run
+    args.func(args)
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/_cli/run.py", line 214, in _run_cmd
+    self._run_single_device(args, is_builtin=is_builtin)
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/_cli/run.py", line 111, in _run_single_device
+    runpy.run_module(str(args.recipe), run_name="__main__")
+  File "<frozen runpy>", line 229, in run_module
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/dsep/data-selection-framework/less/recipe/eval.py", line 687, in <module>
+    sys.exit(recipe_main())
+             ^^^^^^^^^^^^^
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/config/_parse.py", line 96, in wrapper
+    yaml_args, cli_args = parser.parse_known_args()
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/config/_parse.py", line 58, in parse_known_args
+    config = OmegaConf.load(namespace.config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/omegaconf/omegaconf.py", line 189, in load
+    with io.open(os.path.abspath(file_), "r", encoding="utf-8") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/dsep/data-selection-framework/hpc/configs/SingleSampler_eval_finetuned.yaml'

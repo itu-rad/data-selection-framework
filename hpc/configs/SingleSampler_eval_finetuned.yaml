@@ -13,14 +13,14 @@ checkpointer:
   _component_: misc.checkpointer.radTFullModelHFCheckpointer
 # local dir, to find checkout
 # If you are using a ML-flow model define the downstream local checkpoint dir here. 
-  checkpoint_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/full_single_device/SimpleSampler
+  checkpoint_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/full_single_device/SingleSampler
   checkpoint_files: [ 
     ft-model-00001-of-00001.safetensors,
   ]
   output_dir: ${output_dir}
   model_type: LLAMA3_2
   # Get and add ML Flow Run ID for each run. Leave blank if model is already locally stored. 
-  mlflow_run_id: 563e9adb925f43c18c85a31de567786c
+  mlflow_run_id:
 
 # Tokenizer
 tokenizer:

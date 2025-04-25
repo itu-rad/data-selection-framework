@@ -21,7 +21,7 @@ tune download $model_company/$model_name --ignore-patterns "original/consolidate
   
 # with radt:
 echo "Starting finetuning..."
-python -u -m radt -e 137 --local --manual tune.py run less/recipe/test_full_finetune.py --config hpc/config/HalfSampler_train.yaml
+python -u -m radt -e 137 --local --manual tune.py run less/recipe/test_full_finetune.py --config hpc/configs/HalfSampler_train.yaml
 
 # without radt:
 #python tune.py run less/recipe/test_full_finetune.py --config less/config/llama3_2/1b_full/train.yaml

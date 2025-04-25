@@ -20,7 +20,7 @@ checkpointer:
   output_dir: ${output_dir}
   model_type: LLAMA3_2
   # Get and add ML Flow Run ID for each run. Leave blank if model is already locally stored. 
-  mlflow_run_id: 563e9adb925f43c18c85a31de567786c
+  mlflow_run_id: 
 
 # Tokenizer
 tokenizer:
