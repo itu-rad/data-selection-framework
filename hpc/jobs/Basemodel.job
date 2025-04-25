@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=hpc/output/BaseModel3.job     # Job name
-#SBATCH --output=hpc/output/BaseModel3.out       # Output file
+#SBATCH --job-name=hpc/jobs/BaseModel.job     # Job name
+#SBATCH --output=hpc/output/BaseModel.out       # Output file
 #SBATCH --cpus-per-task=16                  # CPU cores per task (adjust based on your needs)
-#SBATCH --gres=gpu:v100                     # Request certain GPU
+#SBATCH --gres=gpu:v100                    # Request certain GPU
 #SBATCH --mem=64G
 #SBATCH --time=48:00:00                         # Run for up to 2 days
 #SBATCH --partition=acltr                       # Run on GPU queue
@@ -28,4 +28,4 @@ nvidia-smi
  
 # Evaluate base and finetuned model, remember to use last epoch in config
 echo "Starting evaluation of model(s)..."
-tune run less/recipe/eval.py --config less/config/llama3_2/1b_full/eval_base.yaml
+tune run less/recipe/eval.py --config hpc/configs/BaseModel_eval_base.yaml

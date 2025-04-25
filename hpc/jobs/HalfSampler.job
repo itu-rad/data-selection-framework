@@ -1,0 +1,31 @@
+#!/bin/bash
+#SBATCH --job-name=hpc/jobs/HalfSampler.job     # Job name
+#SBATCH --output=hpc/output/HalfSampler.out       # Output file
+#SBATCH --cpus-per-task=16                  # CPU cores per task (adjust based on your needs)
+#SBATCH --gres=gpu:v100                     # Request certain GPU
+#SBATCH --mem=64G
+#SBATCH --time=48:00:00                         # Run for up to 2 days
+#SBATCH --partition=acltr                       # Run on GPU queue
+ 
+echo "Running on $(hostname):"
+nvidia-smi
+ 
+# Execute pipeline
+# Download model
+model_company="meta-llama"
+model_name="Llama-3.2-1B-Instruct"
+ 
+# echo "Starting model download..."
+tune download $model_company/$model_name --ignore-patterns "original/consolidated.00.pth" --output-dir ./model_cache/downloaded_models/$model_name# 
+ 
+  
+# with radt:
+echo "Starting finetuning..."
+python -u -m radt -e 137 --local --manual tune.py run less/recipe/test_full_finetune.py --config hpc/config/HalfSampler_train.yaml
+
+# without radt:
+#python tune.py run less/recipe/test_full_finetune.py --config less/config/llama3_2/1b_full/train.yaml
+ 
+# Evaluate base and finetuned model, remember to use last epoch in config
+echo "Starting evaluation of model(s)..."
+tune run less/recipe/eval.py --config hpc/configs/HalfSampler_eval_finetuned.yaml

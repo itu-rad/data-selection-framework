@@ -7,7 +7,7 @@
 #
 # The default config uses an optimizer from bitsandbytes. If you do not have it installed,
 # you can install it with
-#   pip install bitsandbytes
+# pip install bitsandbytes
 #
 # To launch on a single device, run the following command from root:
 #   tune run full_finetune_single_device --config llama3_2/1B_full_single_device
@@ -19,10 +19,10 @@
 #
 # This config works only for training on single device.
 
-output_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/full_single_device # Change it to your preference.
+output_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/full_single_device/PercentageSampler # Change it to your preference.
 
 sampler:
-  _component_: selection.HalfSampler
+  _component_: selection.PercentageSampler
   percentage:
 
 # Tokenizer

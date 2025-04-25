@@ -10,13 +10,17 @@ model:
   _component_: torchtune.models.llama3_2.llama3_2_1b
 
 checkpointer:
-  _component_: torchtune.training.FullModelHFCheckpointer
-  checkpoint_dir: model_cache/downloaded_models/Llama-3.2-1B-Instruct/
+  _component_: misc.checkpointer.radTFullModelHFCheckpointer
+# local dir, to find checkout
+# If you are using a ML-flow model define the downstream local checkpoint dir here. 
+  checkpoint_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/full_single_device/FullSampler
   checkpoint_files: [
-    model.safetensors
+    ft-model-00001-of-00001.safetensors,
   ]
   output_dir: ${output_dir}
   model_type: LLAMA3_2
+  # Get and add ML Flow Run ID for each run. Leave blank if model is already locally stored. 
+  mlflow_run_id: 563e9adb925f43c18c85a31de567786c
 
 # Tokenizer
 tokenizer:
@@ -30,7 +34,7 @@ dtype: bf16
 seed: 1234 # It is not recommended to change this seed, b/c it matches EleutherAI's default seed
 
 # EleutherAI specific eval args
-tasks: [commonsense_qa]
+tasks: [arch_easy,arch_challenge]
 limit: null
 max_seq_length: 4096
 batch_size: 8

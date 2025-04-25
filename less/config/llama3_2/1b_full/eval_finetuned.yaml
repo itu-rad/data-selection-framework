@@ -12,15 +12,15 @@ model:
 checkpointer:
   _component_: misc.checkpointer.radTFullModelHFCheckpointer
 # local dir, to find checkout
-# If you are using a ML-flow model define its local checkpoint dir here. 
-  checkpoint_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/full_single_device/epoch_0/
+# If you are using a ML-flow model define the downstream local checkpoint dir here. 
+  checkpoint_dir: model_cache/finetuned_models/ML-flow/HalfSampler2
   checkpoint_files: [
     ft-model-00001-of-00001.safetensors,
   ]
   output_dir: ${output_dir}
   model_type: LLAMA3_2
   # Get and add ML Flow Run ID for each run. Leave blank if model is already locally stored. 
-  mlflow_run_id: 
+  mlflow_run_id: 563e9adb925f43c18c85a31de567786c
 
 # Tokenizer
 tokenizer:
@@ -34,7 +34,7 @@ dtype: bf16
 seed: 1234 # It is not recommended to change this seed, b/c it matches EleutherAI's default seed
 
 # EleutherAI specific eval args
-tasks: ["truthfulqa_mc2"]
+tasks: [truthfulqa_mc2, triviaqa, commonsense_qa]
 limit: null
 max_seq_length: 4096
 batch_size: 8
