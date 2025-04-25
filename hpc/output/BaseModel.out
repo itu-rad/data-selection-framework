@@ -20,3 +20,70 @@ Fri Apr 25 11:26:35 2025
 |  No running processes found                                                             |
 +-----------------------------------------------------------------------------------------+
 Starting evaluation of model(s)...
+Running EleutherEvalRecipe with resolved config:
+
+batch_size: 8
+checkpointer:
+  _component_: torchtune.training.FullModelHFCheckpointer
+  checkpoint_dir: model_cache/downloaded_models/Llama-3.2-1B-Instruct/
+  checkpoint_files:
+  - model.safetensors
+  model_type: LLAMA3_2
+  output_dir: ./
+device: cuda
+dtype: bf16
+enable_kv_cache: true
+limit: null
+max_seq_length: 4096
+model:
+  _component_: torchtune.models.llama3_2.llama3_2_1b
+output_dir: ./
+quantizer: null
+seed: 1234
+tasks:
+- arch_easy
+- arch_challenge
+tokenizer:
+  _component_: torchtune.models.llama3.llama3_tokenizer
+  max_seq_len: null
+  path: model_cache/downloaded_models/Llama-3.2-1B-Instruct/original/tokenizer.model
+
+Model is initialized with precision torch.bfloat16.
+Detected kernel version 4.18.0, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
+Traceback (most recent call last):
+  File "/home/dsep/miniconda3/envs/selection/bin/tune", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/_cli/tune.py", line 49, in main
+    parser.run(args)
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/_cli/tune.py", line 43, in run
+    args.func(args)
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/_cli/run.py", line 214, in _run_cmd
+    self._run_single_device(args, is_builtin=is_builtin)
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/_cli/run.py", line 111, in _run_single_device
+    runpy.run_module(str(args.recipe), run_name="__main__")
+  File "<frozen runpy>", line 229, in run_module
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/dsep/data-selection-framework/less/recipe/eval.py", line 687, in <module>
+    sys.exit(recipe_main())
+             ^^^^^^^^^^^^^
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/torchtune/config/_parse.py", line 99, in wrapper
+    sys.exit(recipe_main(conf))
+             ^^^^^^^^^^^^^^^^^
+  File "/home/dsep/data-selection-framework/less/recipe/eval.py", line 591, in recipe_main
+    recipe.evaluate(cfg=cfg)
+  File "/home/dsep/data-selection-framework/less/recipe/eval.py", line 537, in evaluate
+    task_dict = get_task_dict(self.tasks, task_manager)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/lm_eval/tasks/__init__.py", line 619, in get_task_dict
+    task_name_from_string_dict = task_manager.load_task_or_group(
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/lm_eval/tasks/__init__.py", line 415, in load_task_or_group
+    collections.ChainMap(*map(self._load_individual_task_or_group, task_list))
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/lm_eval/tasks/__init__.py", line 317, in _load_individual_task_or_group
+    subtask_list = self._get_tasklist(name_or_config)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/dsep/miniconda3/envs/selection/lib/python3.12/site-packages/lm_eval/tasks/__init__.py", line 237, in _get_tasklist
+    return self.task_index[name]["task"]
+           ~~~~~~~~~~~~~~~^^^^^^
+KeyError: 'arch_easy'

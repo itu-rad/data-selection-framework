@@ -34,7 +34,7 @@ dtype: bf16
 seed: 1234 # It is not recommended to change this seed, b/c it matches EleutherAI's default seed
 
 # EleutherAI specific eval args
-tasks: [arch_easy,arch_challenge]
+tasks: [arc_easy,arc_challenge]
 limit: null
 max_seq_length: 4096
 batch_size: 8
