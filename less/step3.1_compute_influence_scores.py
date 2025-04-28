@@ -89,7 +89,7 @@ def compute_influence_scores(cfg):
             print(f"Shape of influence_score:{influence_score.shape}")    
             print (influence_score)
             influence_score = influence_score.reshape(influence_score.shape[0], N_SUBTASKS[validation_task], -1).mean(-1).max(-1)[0]
-            print(f"Shape of new influence_score:{influence_score.shape}")    
+            print(f"Shape of new influence_score after reshape:{influence_score.shape}")    
             print (influence_score)
             
             
