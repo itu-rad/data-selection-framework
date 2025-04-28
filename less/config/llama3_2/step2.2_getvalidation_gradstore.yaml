@@ -5,7 +5,7 @@ checkpoints: [0,1,2,3] # A list of which epochs to be used (epochs start from 0)
 gradient_projection_dimension: [8192]
 gradient_type: SGD
 info_type : grads
-max_samples: 4
+max_samples: 5
 
 
 # Model Arguments
