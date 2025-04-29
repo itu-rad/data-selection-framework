@@ -42,45 +42,97 @@ def get_dataset(cfg):
         
     return ds
 
+
+def select_data_amount(cfg, total_samples):
+    """
+    This function computes the amount of data that should be selected.
+    
+    Args:
+    cfg (DictConfig): The configuration dictionary.
+    total_samples (int): The total number of samples in the dataset.
+    
+    Returns:
+    data_amount_string (str): A string that indicates whether the data is selected based on percentage or max_samples.
+    flag (bool): A boolean flag that indicates whether the data is selected based on percentage or max_samples.
+    """
+    # We might want to change somes lines, such that either percentage or max_samples is supplied. 
+    flag = False
+
+    if cfg.percentage is not None:
+        # If flag is returned as True, then our debug message will consider Percentage. vice versa. 
+        flag = True
+        cfg.max_samples = int(cfg.percentage * total_samples)
+        data_amount_string = f"p{cfg.percentage}"
+        return data_amount_string, flag
+    
+    else:
+        data_amount_string = f"num{cfg.max_samples}"
+        return data_amount_string, flag
+            
+        
+
 def setup(cfg):
+    """
+    This function sets up the configuration for the selection process.
     
-    n_datasets = len(cfg.dataset_names)
-    assert len(n_datasets) == len(cfg.datasets),"dataset_names and datasets must have the same length"
-    assert cfg.percentage is not None or cfg.max_samples is not None,"Both 'percentage' and 'max_sample' config fields cannot be 'None'"
+    Args:
+    cfg (DictConfig): The configuration dictionary.
     
-    
-    
+    Returns:
+    score_paths (list): A list of paths to the influence score files.
+    num_samples (list): A list of the number of samples in each influence score file.
+    data_amount_string (str): A string indicating the amount of data selected.
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-
-   
+    # Check that the lengths of dataset_names and datasets are equal
+    n_datasets = len(cfg.dataset_names)
+    assert len(n_datasets) == len(cfg.datasets), "dataset_names and datasets must have the same length"
+    
+    # Check that either percentage or max_samples is not None
+    assert cfg.percentage is not None or cfg.max_samples is not None, "Both 'percentage' and 'max_sample' config fields cannot be 'None'"
+    
+    # Initialize an empty list to hold the paths to the influence score files
+    score_paths = []
+    
+    # Loop over each target task name
     for target_task_name in cfg.target_task_names:
         output_path = os.path.join(cfg.output_path, target_task_name)
-
-        score_paths = [os.path.join(
-            # task_name variable should perhaps be train_file_name
-            output_path, f"{task_name}_influence_score.pt") for task_name in cfg.train_file_names]
+        # Loop over each dataset name
+        for dataset in cfg.dataset_names:
+            # Create the path to the influence score file
+            score_path = os.path.join(output_path, f"{dataset}_influence_score.pt")
+            # Add the path to the list
+            score_paths.append(score_path)
+        
+        # Initialize an empty list to hold the number of samples in each influence score file
         num_samples = []
+        # Loop over each score path
         for score_path in score_paths:
-            num_samples.append(
-                len(torch.load(score_path, map_location=device)))
+            # Load the influence score file and get the number of samples
+            num_samples.append(len(torch.load(score_path, map_location=device)))
         
-        
+        # Get the total number of samples
         total_samples = sum(num_samples)
-        if cfg.percentage is not None:
-            cfg.max_samples = int(cfg.percentage * total_samples)
-            data_amount_name = f"p{cfg.percentage}"
+        
+        # Select the amount of data to be selected
+        data_amount_string, flag = select_data_amount(cfg, total_samples=total_samples)
+        
+        # Print a message indicating the amount of data selected
+        if flag:
+            print(f'Percentage of selected data:{cfg.percentage}')
+            print(f'Amount of data selected:{data_amount_string}')
         else:
-            data_amount_name = f"num{cfg.max_samples}"
+            print(f'Amount of data selected with max_samples:{data_amount_string}')
+            
+        # Return the list of score paths, the list of number of samples, and the data amount string
+        return score_paths, num_samples, data_amount_string
+    
+       
 
-        return score_path, num_samples 
+        
     
 
-
-
-# We might want to change somes lines, such that either percentage or max_samples is supplied. 
-# Will also need to be reflected in select_data.sh. 
-# Will make the code easier to read and simplier to use. 
 def recipe_main(cfg:DictConfig="./data-selection-framework/less/config/llama3_2/step3.2_selest_top_k.yaml") -> None:
     
     cfg = OmegaConf.load(cfg)
