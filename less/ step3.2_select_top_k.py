@@ -45,29 +45,35 @@ def get_dataset(cfg):
 
 def select_data_amount(cfg, total_samples):
     """
-    This function computes the amount of data that should be selected.
-    
+    This function determines the amount of data to be selected based on configuration.
+
     Args:
     cfg (DictConfig): The configuration dictionary.
     total_samples (int): The total number of samples in the dataset.
-    
+
     Returns:
     data_amount_string (str): A string that indicates whether the data is selected based on percentage or max_samples.
     flag (bool): A boolean flag that indicates whether the data is selected based on percentage or max_samples.
     """
-    # We might want to change somes lines, such that either percentage or max_samples is supplied. 
-    flag = False
+    # Initialize flag to indicate selection method
 
-    if cfg.percentage is not None:
-        # If flag is returned as True, then our debug message will consider Percentage. vice versa. 
-        flag = True
-        cfg.max_samples = int(cfg.percentage * total_samples)
-        data_amount_string = f"p{cfg.percentage}"
-        return data_amount_string, flag
+      # Print a message indicating the amount of data selected
     
+            
+          
+    # Determine selection based on percentage if provided
+    if cfg.percentage is not None:
+        top_k = int(cfg.percentage * total_samples)
+        cfg.max_samples = top_k
+        print(f'Percentage of selected data:{cfg.percentage}')
+        print(f'top_k of data selected from percentage:{top_k}')
+        return top_k
+
+    # Default to max_samples if percentage is not provided
     else:
-        data_amount_string = f"num{cfg.max_samples}"
-        return data_amount_string, flag
+        top_k = int(cfg.max_samples)
+        print(f'top_k of data selected via max_samples:{top_k}')
+        return top_k
             
         
 
@@ -87,7 +93,7 @@ def setup(cfg):
     
     # Check that the lengths of dataset_names and datasets are equal
     n_datasets = len(cfg.dataset_names)
-    assert len(n_datasets) == len(cfg.datasets), "dataset_names and datasets must have the same length"
+    assert n_datasets == len(cfg.datasets), "amount of datasets and amount of dataset names must be the same amount."
     
     # Check that either percentage or max_samples is not None
     assert cfg.percentage is not None or cfg.max_samples is not None, "Both 'percentage' and 'max_sample' config fields cannot be 'None'"
@@ -95,48 +101,84 @@ def setup(cfg):
     # Initialize an empty list to hold the paths to the influence score files
     score_paths = []
     
+    
     # Loop over each target task name
     for target_task_name in cfg.target_task_names:
         output_path = os.path.join(cfg.output_path, target_task_name)
+        
         # Loop over each dataset name
         for dataset in cfg.dataset_names:
             # Create the path to the influence score file
-            score_path = os.path.join(output_path, f"{dataset}_influence_score.pt")
+            score_path = os.path.join(cfg.influence_score_path ,target_task_name, f"{dataset}_influence_score.pt")
             # Add the path to the list
             score_paths.append(score_path)
         
         # Initialize an empty list to hold the number of samples in each influence score file
         num_samples = []
+        total_samples = 0
         # Loop over each score path
         for score_path in score_paths:
             # Load the influence score file and get the number of samples
-            num_samples.append(len(torch.load(score_path, map_location=device)))
-        
-        # Get the total number of samples
-        total_samples = sum(num_samples)
-        
-        # Select the amount of data to be selected
-        data_amount_string, flag = select_data_amount(cfg, total_samples=total_samples)
-        
-        # Print a message indicating the amount of data selected
-        if flag:
-            print(f'Percentage of selected data:{cfg.percentage}')
-            print(f'Amount of data selected:{data_amount_string}')
-        else:
-            print(f'Amount of data selected with max_samples:{data_amount_string}')
+            current_file= torch.load(score_path, map_location=device)
+            current_file_len= (len(current_file))
+            num_samples.append(current_file_len)
+            total_samples+=current_file_len
             
-        # Return the list of score paths, the list of number of samples, and the data amount string
-        return score_paths, num_samples, data_amount_string
-    
-       
-
+            
+        # Select the amount of data to be selected
+        top_k = select_data_amount(cfg, total_samples=total_samples)
         
+        # Return the list of score paths, the list of number of samples, and the data amount string
+        return output_path,score_paths, num_samples, top_k
+
+
+def sort_dataset_arrays(cfg,num_samples,output_path,score_paths): 
+    -------------------------------------------------
+    all_scores = []
+    # "score_paths" is utilized here, so if this code is not nessesary, then remove score_paths from setup()
+    # train_file and cfg.datasets is never referenced in the loop.
+    # Should perhaps be deleted. 
+    for score_path, train_file in zip(score_paths, cfg.datasets):
+        score = torch.load(score_path, map_location=device)
+        all_scores.append(score)
+    all_scores = torch.cat(all_scores, dim=0)
+    -------------------------------------------------
     
+    
+    ----------------------------------------------------------------------------------
+    # sort the scores and output the corresponding data index
+    file_specific_index = torch.cat([torch.arange(line_num) for line_num in num_samples]).to(device)
+    
+    data_from = torch.cat([torch.ones(line_num, dtype=torch.long)* i for i, line_num in enumerate(num_samples)]).to(device)
+    
+    # sorted_scores is only used for preprocessing for plots. Might be of use later. 
+    sorted_scores, sorted_index = torch.sort(all_scores, dim=0, descending=True)
+    # sorted_score_file is only used for preprocessing for plots. Might be of use later. 
+    sorted_score_file = os.path.join(output_path, f"sorted.csv")
+    ------------------------------------------------------------------------------------------
+    
+    
+    # revisit later
+    data_from = data_from[sorted_index]
+    sorted_index = file_specific_index[sorted_index]
+    
+    return all_scores, sorted_scores, sorted_index, file_specific_index, data_from
+
+    #all_scores = 32,43,3,1,2,5,100
+    #sorted_scores = 100,32,43,5,3,2,1
+    #sorted_index =  6,0,1,7,12,5
+    #file_specific_index = 0,1,2,3,4,5,6,0,1,2,3,4,5,0,1,2,3,4
+    #data_from =0,0,0,0,0,0,0,1,1,
+
 
 def recipe_main(cfg:DictConfig="./data-selection-framework/less/config/llama3_2/step3.2_selest_top_k.yaml") -> None:
     
     cfg = OmegaConf.load(cfg)
     ds = get_dataset(cfg)
+    output_path,score_paths, num_samples, top_k = setup(cfg)
+    
+    all_scores, sorted_scores, sorted_index, file_specific_index, data_from = \
+        sort_dataset_arrays(cfg, num_samples, output_path)
 
 
 if __name__ == "__main__":
@@ -169,9 +211,6 @@ if __name__ == "__main__":
             data_amount_name = f"num{cfg.max_samples}"
 
         return score_path, num_samples
-
-
-
 
 
 
