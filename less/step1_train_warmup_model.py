@@ -241,7 +241,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         self._steps_per_epoch = (
             # implemented static LESS warmup percentage, so tqdm will regard total bar to desired warmup percentage. 
-            int(len(self._dataloader) // self._gradient_accumulation_steps) 
+            int(len(self._dataloader) // self._gradient_accumulation_steps * cfg.sampler.percentage) 
         )
         if (
             self.max_steps_per_epoch is not None
@@ -568,17 +568,18 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                 self._sampler.set_epoch(curr_epoch) if not cfg.same_shuffle_every_epoch else 0
                 self._sampler.pre_epoch()
                 
-                if cfg.n_print_examples is not None:
-                    sample_count = 0
-                    for idx, batch in enumerate(self._dataloader):
-                        # Print some examples
-                        if sample_count <= cfg.n_print_examples:
-                            for key, value in batch.items():
-                                sample_count = +1
-                                if sample_count <= cfg.n_print_examples:
-                                    decoded = self._tokenizer.decode(key["tokens"].tolist(),skip_special_tokens=True)
-                                    print(f"\n--- Sample {sample_count} decoded ---")
-                                    print(decoded)
+                # if cfg.n_print_examples is not None:
+                #     sample_count = 0
+                #     for idx, batch in enumerate(self._dataloader):
+                #         # Print some examples
+                #         if sample_count <= cfg.n_print_examples:
+                #             for key, value in batch.items():
+                #                 sample_count = sample_count+1
+                #                 if sample_count <= cfg.n_print_examples:
+                #                     print(f"value: {value}")
+                #                     decoded = self._tokenizer.decode(value.tolist(), skip_special_tokens=True)                                    
+                #                     print(f"\n--- Sample {sample_count} decoded ---")
+                #                     print(decoded)
                 
                 pbar = tqdm(total=self._steps_per_epoch)
                 for idx, batch in enumerate(self._dataloader):
@@ -705,7 +706,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         self._metric_logger.close()
 
 
-def train_warmup_model(cfg: DictConfig = "less/config/llama3_2/step1_warmup.yaml") -> None:
+def train_warmup_model(cfg: DictConfig = "less/config/llama3_2/step1_train_warmup_model.yaml") -> None:
     
     cfg = OmegaConf.load(cfg)
     config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
