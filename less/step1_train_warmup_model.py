@@ -568,18 +568,18 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                 self._sampler.set_epoch(curr_epoch) if not cfg.same_shuffle_every_epoch else 0
                 self._sampler.pre_epoch()
                 
-                # if cfg.n_print_examples is not None:
-                #     sample_count = 0
-                #     for idx, batch in enumerate(self._dataloader):
-                #         # Print some examples
-                #         if sample_count <= cfg.n_print_examples:
-                #             for key, value in batch.items():
-                #                 sample_count = sample_count+1
-                #                 if sample_count <= cfg.n_print_examples:
-                #                     print(f"value: {value}")
-                #                     decoded = self._tokenizer.decode(value.tolist(), skip_special_tokens=True)                                    
-                #                     print(f"\n--- Sample {sample_count} decoded ---")
-                #                     print(decoded)
+                if cfg.n_print_examples is not None:
+                    sample_count = 0
+                    for idx, batch in enumerate(self._dataloader):
+                        if sample_count >= cfg.n_print_examples:
+                            break
+                        for sample in batch.get("tokens"):
+                            if sample_count >= cfg.n_print_examples:
+                                break
+                            decoded = self._tokenizer.decode(sample.tolist(), skip_special_tokens=True)
+                            sample_count += 1
+                            print(f"\n--- Sample {sample_count} from dataloader decoded ---")
+                            print(decoded)
                 
                 pbar = tqdm(total=self._steps_per_epoch)
                 for idx, batch in enumerate(self._dataloader):
