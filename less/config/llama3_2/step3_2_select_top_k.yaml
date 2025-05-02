@@ -1,9 +1,11 @@
 model_name: llama3_2_1B_instruct
 output_path: ./less/selected_data/${model_name}
-influencescore_path: ./less/influence_scores/${model_name}
-target_task_names: [truthful_qa]
-dataset_names: [alpaca_cleaned_dataset]
-datasets: [torchtune.datasets.alpaca_cleaned_dataset]
 
+influence_score_path: ./less/influence_scores/${model_name}
+target_task_names: [truthful_qa]
+
+dataset_paths: [yahma/alpaca-cleaned]
+dataset_names: [alpaca_cleaned_dataset]
+split: train
 max_samples: 
-percentage:
+percentage: 0.50  
