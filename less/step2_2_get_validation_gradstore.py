@@ -889,7 +889,7 @@ def set_checkpoint_paths(cfg):
     return cfg
     
     
-def recipe_main(cfg: DictConfig = "less/config/llama3_2/step2.2_getvalidation_gradstore.yaml") -> None:
+def get_validation_gradstore(cfg: DictConfig = "less/config/llama3_2/step2_2_get_validation_gradstore.yaml") -> None:
     
     
     cfg = OmegaConf.load(cfg)
@@ -907,4 +907,4 @@ def recipe_main(cfg: DictConfig = "less/config/llama3_2/step2.2_getvalidation_gr
 
 
 if __name__ == "__main__":
-    sys.exit(recipe_main())
+    sys.exit(get_validation_gradstore())

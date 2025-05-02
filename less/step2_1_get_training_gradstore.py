@@ -847,7 +847,7 @@ def multiple_checkpoints(cfg):
         cfgs.append(new_cfg)
     return cfgs 
     
-def recipe_main(cfg: DictConfig = "less/config/llama3_2/step2.1_gettraining_gradstore.yaml") -> None:
+def get_training_gradstore(cfg: DictConfig = "less/config/llama3_2/step2_1_get_training_gradstore.yaml") -> None:
     cfg = OmegaConf.load(cfg)
     cfg = set_dataset_output_dir(cfg)
      
@@ -863,4 +863,4 @@ def recipe_main(cfg: DictConfig = "less/config/llama3_2/step2.1_gettraining_grad
 
 
 if __name__ == "__main__":
-    sys.exit(recipe_main())
+    sys.exit(get_training_gradstore())

@@ -114,7 +114,7 @@ def get_avg_lr_csv(cfg):
     # return changed cfg
     
     return cfg 
-def recipe_main(cfg: DictConfig = "less/config/llama3_2/step3.1_compute_influence_scores.yaml"):
+def get_influence_scores(cfg: DictConfig = "less/config/llama3_2/step3.1_get_influence_scores.yaml"):
     
     cfg = OmegaConf.load(cfg)
     changed_config1 = get_avg_lr_csv(cfg)
@@ -122,8 +122,5 @@ def recipe_main(cfg: DictConfig = "less/config/llama3_2/step3.1_compute_influenc
     compute_influence_scores(changed_config2)
     
  
-    
-    
-    
 if __name__ == "__main__":
-    sys.exit(recipe_main())
+    sys.exit(get_influence_scores())

@@ -1,6 +1,6 @@
 model_name: llama3_2_1B_instruct
-output_path: ./data-selection-framework/less/selected_data/${model_name}
-influencescore_path: ./data-selection-framework/less/influence_scores/${model_name}
+output_path: ./less/selected_data/${model_name}
+influencescore_path: ./less/influence_scores/${model_name}
 target_task_names: [truthful_qa]
 dataset_names: [alpaca_cleaned_dataset]
 datasets: [torchtune.datasets.alpaca_cleaned_dataset]

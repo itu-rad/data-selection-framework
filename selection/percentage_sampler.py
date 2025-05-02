@@ -9,6 +9,7 @@ class PercentageBasedSampler(SelectiveSampler):
            dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed
        )
        self.percentage = percentage
+       print(f"PercentageBasedSampler initialized with percentage: {self.percentage}")
        self.mask = None
        self.no_grad_scoring = False
     
