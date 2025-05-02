@@ -171,11 +171,12 @@ def select_and_write_samples(cfg, sorted_file_specific_index, sorted_data_from, 
         data_amount_name = f"p{cfg.percentage}"
     else:
         data_amount_name = f"num{cfg.max_samples}"
-        
-    with open(os.path.join(cfg.output_path, target_task_name, f"top_{data_amount_name}.jsonl"), 'w', encoding='utf-8', errors='ignore') as file:
-        for index, data_from in zip(final_index_list, final_data_from):
-                print(datasets[data_from][index])
-                file.write(json.dumps(datasets[data_from][index]) + "\n")
+    
+    top_k_path = os.path.join(cfg.output_path, target_task_name, f"top_{data_amount_name}.jsonl")    
+    with open(top_k_path, 'w', encoding='utf-8', errors='ignore') as file:
+        print(f"Writing top_k datasamples to {top_k_path}")
+        for index, data_from in zip(final_index_list, final_data_from):    
+            file.write(json.dumps(datasets[data_from][index]) + "\n")
 
          
 
@@ -188,12 +189,6 @@ def select_top_k(cfg:DictConfig="./less/config/llama3_2/step3_2_select_top_k.yam
         score_paths, num_samples, top_k = setup(cfg,target_task_name)
         sorted_file_specific_index, sorted_data_from = sort_scores(cfg, score_paths, num_samples, target_task_name)
         select_and_write_samples(cfg, sorted_file_specific_index, sorted_data_from, num_samples, top_k, target_task_name)
-
-    #all_scores = 32,43,3,1,2,5,100
-    #sorted_scores = 100,32,43,5,3,2,1
-    #sorted_index =  6,0,1,7,12,5
-    #file_specific_index = 0,1,2,3,4,5,6,0,1,2,3,4,5,0,1,2,3,4
-    #data_from =0,0,0,0,0,0,0,1,1,
 
 
 if __name__ == "__main__":
