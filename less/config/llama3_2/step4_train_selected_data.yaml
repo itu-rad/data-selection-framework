@@ -36,11 +36,10 @@ save_adapter_weights_only: False
 
 
 dataset:
-  _component_: torchtune.datasets.instruct_dataset
+  _component_: torchtune.datasets.alpaca_dataset
   packed: False  # True increases speed
   source: json
   data_files: ${dataset_dir}
-  new_system_prompt: torchtune.data.AlpacaInstructTemplate
 seed: 42
 shuffle: True
 same_shuffle_every_epoch: True
