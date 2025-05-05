@@ -416,51 +416,51 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
     ) -> Tuple[DataLoader]:
     
         
-        def preprocess_ds(subtask_column,ds_path,data_dir,split): 
-    
-
+        def preprocess_ds(ds_path, data_dir, split, subtask_column1, subtask_column2=None):
+            
             ds = load_dataset(path=ds_path, data_dir=data_dir, split=split)
-              
-            # To store one example per subtask
+
+            if subtask_column2:
+                # Use both columns
+                get_key = lambda ex: (ex[subtask_column1], ex[subtask_column2])
+                expected_keys = set((ex[subtask_column1], ex[subtask_column2]) for ex in ds)
+            else:
+                # Use only one column
+                get_key = lambda ex: ex[subtask_column1]
+                expected_keys = set(ex[subtask_column1] for ex in ds)
+
             unique_examples = {}
             for example in ds:
-                subtask = example[subtask_column]
-                if subtask not in unique_examples:
-                    unique_examples[subtask] = example
-                # Stop if we've found one for each subtask
-                if len(unique_examples) == len(set(ds[subtask_column])):
+                key = get_key(example)
+                if key not in unique_examples:
+                    unique_examples[key] = example
+                if len(unique_examples) == len(expected_keys):
                     break
-                 
-            # Convert your values (the filtered examples) into a list
-            examples = list(unique_examples.values())
-            # Create a new Hugging Face dataset from the list
-            mini_ds = Dataset.from_list(examples)
-            
-            try: 
-                assert len(mini_ds) == len(set(ds[subtask_column]))
-                print(f"mini dataset has the correct length")
-                print(f"Length of mini dataset:{len(mini_ds)}")
-                print(f"Expected length:{len(set(ds[subtask_column]))}")
+                
+            mini_ds = Dataset.from_list(list(unique_examples.values()))
 
-            except AssertionError: 
-                print(f"{mini_ds} does not have the expected length!")
-                print(f"Length of mini dataset:{len(mini_ds)}")
-                print(f"Expected length:{len(set(ds[subtask_column]))}")
+            try:
+                assert len(mini_ds) == len(expected_keys)
+                print(f"✅ Mini dataset has the correct length: {len(mini_ds)}")
+            except AssertionError:
+                print(f"❌ Mini dataset does not have the expected length!")
+                print(f"Length of mini dataset: {len(mini_ds)}")
+                print(f"Expected length: {len(expected_keys)}")
                 sys.exit()
-            
-            # Dynamically save mini_ds as .json to cache dir based on cfg_dataset
+
             cache_dir_path = "less/cache_dir"
-            mini_ds_name = cfg_dataset.source.split("/")[-1]
-            mini_ds_path= os.path.join(cache_dir_path,mini_ds_name+".json")
-            
-            print(f"Saving mini_ds as Json to {mini_ds_path}")
-            mini_ds.to_json(f"{mini_ds_path}", orient="records", lines=True)
-            
+            os.makedirs(cache_dir_path, exist_ok=True)
+            mini_ds_name = os.path.basename(ds_path)
+            mini_ds_path = os.path.join(cache_dir_path, mini_ds_name + ".json")
+
+            print(f"Saving mini_ds as JSON to {mini_ds_path}")
+            mini_ds.to_json(mini_ds_path, orient="records", lines=True)
+
             return mini_ds_path
                 
            
     
-        mini_ds_path = preprocess_ds(cfg_dataset.subtask_column,cfg_dataset.source,cfg_dataset.data_dir,cfg_dataset.split)
+        mini_ds_path = preprocess_ds(cfg_dataset.source,cfg_dataset.data_dir,cfg_dataset.split, cfg_dataset.subtask_column1, cfg_dataset.subtask_column2)
         
                 
 

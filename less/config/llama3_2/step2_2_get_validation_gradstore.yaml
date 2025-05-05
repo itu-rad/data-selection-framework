@@ -46,7 +46,8 @@ dataset:
   data_dir: generation
   split: validation
   # specify the columns for _setup_data() in step 2.2_getvalidation_gradstore.py
-  subtask_column: category
+  subtask_column1: category
+  subtask_column2: type
   input_column: question
   output_column: best_answer
 seed: null

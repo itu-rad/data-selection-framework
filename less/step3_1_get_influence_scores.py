@@ -1,34 +1,10 @@
-import argparse
+
 import os
 import sys
 import csv
-import yaml
-
 
 from omegaconf import DictConfig, OmegaConf
 import torch
-
-argparser = argparse.ArgumentParser(
-    description='Script for selecting the data for training')
-argparser.add_argument('--gradient_path', type=str, default="{} ckpt{}",
-                       help='The path to the gradient file')
-argparser.add_argument('--train_file_names', type=str, nargs='+',
-                       help='The name of the training file')
-argparser.add_argument('--ckpts', type=int, nargs='+',
-                       help="Checkpoint numbers.")
-argparser.add_argument('--checkpoint_weights', type=float, nargs='+',
-                       help="checkpoint weights")
-argparser.add_argument('--target_task_names', type=str,
-                       nargs='+', help="The name of the target tasks")
-argparser.add_argument('--validation_gradient_path', type=str,
-                       default="{} ckpt{}", help='The path to the validation gradient file')
-argparser.add_argument('--output_path', type=str, default="selected_data",
-                       help='The path to the output')
-
-
-args = argparser.parse_args()
-
-N_SUBTASKS = {"truthful_qa":5}
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -60,7 +36,7 @@ def compute_influence_scores(cfg):
     # calculate the influence score for each training dataset for each validation task
     for train_file_name in cfg.train_file_names:
         for validation_task in cfg.validation_task_name :
-            influence_score = 0
+            influence_scores = 0
             for i, ckpt in enumerate(cfg.checkpoints):
                 
                 # load training gradients 
@@ -76,6 +52,8 @@ def compute_influence_scores(cfg):
                 # load validation gradients
                 validation_path = os.path.join(cfg.validation_gradient_path,validation_task,f"epoch_{ckpt}",f"dim{cfg.gradient_projection_dimension}","all_orig.pt")
                 validation_info = torch.load(validation_path)
+                num_gradients = validation_info.shape[0]
+                print(f"NOTICE num_gradients: {num_gradients}")
                
     
                 if not torch.is_tensor(validation_info):
@@ -84,21 +62,35 @@ def compute_influence_scores(cfg):
     
     
                 
-                influence_score += cfg.checkpoint_avg_lr[i] * calculate_influence_score(
+                influence_scores += cfg.checkpoint_avg_lr[i] * calculate_influence_score(
                 training_info=training_info, validation_info=validation_info)
-            print(f"Shape of influence_score:{influence_score.shape}")    
-            print (influence_score)
-            influence_score = influence_score.reshape(influence_score.shape[0], N_SUBTASKS[validation_task], -1).mean(-1).max(-1)[0]
-            print(f"Shape of new influence_score after reshape:{influence_score.shape}")    
-            print (influence_score)
-            
-            
-        output_dir = os.path.join(cfg.output_dir, validation_task)
-        os.makedirs(output_dir, exist_ok=True)  # Creates output_dir safely, even if it already exists
+                
+                
+            print(f"Shape of influence_scores:{influence_scores.shape}")    
+            # Step 1: Reshape
+            reshaped = influence_scores.reshape(influence_scores.shape[0], num_gradients[validation_task], -1)
+            print("After reshape:", reshaped.shape)  # Shape: [A, B, C]
 
-        output_file = os.path.join(output_dir, f"{train_file_name}_influence_score.pt")
-        print(f"Saving influence score to {output_file}")
-        torch.save(influence_score, output_file)
+            # Step 2: Mean over last dim
+            meaned = reshaped.mean(dim=-1)
+            print("After mean:", meaned.shape)  # Shape: [A, B]
+
+            # Step 3: Max over last dim
+            maxed = meaned.max(dim=-1)  # Returns a namedtuple (values, indices)
+            print("After max:", maxed)
+            print("Max values:", maxed.values.shape)  # Shape: [A]
+            print("Max indices:", maxed.indices.shape)  # Shape: [A]
+
+            # Step 4: Take only the values (index 0 of the namedtuple)
+            influence_scores = maxed.values
+            print("Final influence_score:", influence_scores.shape)
+
+            output_dir = os.path.join(cfg.output_dir, validation_task)
+            os.makedirs(output_dir, exist_ok=True)  # Creates output_dir safely, even if it already exists
+
+            output_file = os.path.join(output_dir, f"{train_file_name}_influence_scores.pt")
+            print(f"Saving influence score to {output_file}")
+            torch.save(influence_scores, output_file)
 
 
 

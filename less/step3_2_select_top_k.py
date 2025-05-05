@@ -78,7 +78,7 @@ def setup(cfg, target_task_name):
     # Loop over each dataset name
     for dataset_name in cfg.dataset_names:
         # Create the path to the influence score file
-        score_path = os.path.join(cfg.influence_score_path, target_task_name, f"{dataset_name}_influence_score.pt")
+        score_path = os.path.join(cfg.influence_score_path, target_task_name, f"{dataset_name}_influence_scores.pt")
         # Add the path to the list
         score_paths.append(score_path)
     
