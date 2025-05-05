@@ -240,8 +240,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
 
         self._steps_per_epoch = (
-            # implemented static LESS warmup percentage, so tqdm will regard total bar to desired warmup percentage. 
-            int(len(self._dataloader) // self._gradient_accumulation_steps * cfg.sampler.percentage) 
+            int(len(self._dataloader) // self._gradient_accumulation_steps) 
         )
         if (
             self.max_steps_per_epoch is not None

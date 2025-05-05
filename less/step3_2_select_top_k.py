@@ -172,13 +172,11 @@ def select_and_write_samples(cfg, sorted_file_specific_index, sorted_data_from, 
     else:
         data_amount_name = f"num{cfg.max_samples}"
     
-    top_k_path = os.path.join(cfg.output_path, target_task_name, f"top_{data_amount_name}.jsonl")    
+    top_k_path = os.path.join(cfg.output_path, target_task_name, f"top_{data_amount_name}.json")    ##
+    print(f"Writing top_k datasamples to {top_k_path}")
+    collected_data= [datasets[data_from][index] for index, data_from in zip(final_index_list, final_data_from)]
     with open(top_k_path, 'w', encoding='utf-8', errors='ignore') as file:
-        print(f"Writing top_k datasamples to {top_k_path}")
-        for index, data_from in zip(final_index_list, final_data_from):    
-            file.write(json.dumps(datasets[data_from][index]) + "\n")
-
-         
+        json.dump(collected_data,file)
 
 def select_top_k(cfg:DictConfig="./less/config/llama3_2/step3_2_select_top_k.yaml") -> None:
     
