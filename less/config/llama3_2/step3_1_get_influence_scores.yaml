@@ -1,0 +1,14 @@
+model_name: llama3_2_1B_instruct
+output_dir: less/influence_scores/${model_name}
+checkpoints: [0,1,2,3]
+gradient_projection_dimension: 8192
+
+training_gradient_path: ./less/gradstore/llama3_2_1B_instruct/training_grads # Create individual configs for each epoch and reassign training_gradient_path. 
+validation_gradient_path: ./less/gradstore/llama3_2_1B_instruct/validation_grads # Create individual configs for each epoch and reassign validation_gradient_path.
+train_file_names: [alpaca_cleaned_dataset] # Used for calculating influence scores for several trainingsets. Not currently implemented 
+max_samples: null 
+
+avg_lr_path: ./model_cache/less/warmup_models/llama3_2_1B/avg_lr_epochs.csv # average lr of all epochs
+checkpoint_avg_lr:
+
+validation_task_name: [truthful_qa] # Validation tasks. 

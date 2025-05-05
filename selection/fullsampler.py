@@ -21,7 +21,7 @@ class FullSampler(SelectiveSampler):
     def after_forward(self, idx: int, batch: dict, current_loss: float) -> None:
         """No-op after forward hook"""
         pass
-    
+
     def inform_logits(self, idx: int, batch: dict, current_loss: float) -> None:
         """Hook called after model forward pass. Must be implemented by subclasses.
 

@@ -4,21 +4,28 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import radt
+# import radt
+import csv
 import sys
+import os
+# Add the parent directory to sys.path so Python can find 'selection'
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import time
 
 from functools import partial
 from typing import Any, Dict, Optional, Tuple, Union
 from warnings import warn
 
+import shutil
+import os 
 import torch
 import torchtune.modules.common_utils as common_utils
-from omegaconf import DictConfig, ListConfig
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from torch import nn
 from torch.optim import Optimizer
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader
 from torchtune import config, modules, training, utils
 from torchtune.config._utils import _get_component_from_path
 from torchtune.data import padded_collate_packed
@@ -44,86 +51,6 @@ log = utils.get_logger("DEBUG")
 
 
 class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
-    """
-    LoRA finetuning recipe for dense transformer-based LLMs such as Llama2. This recipe is optimized
-    for single GPU training. Training on CPU is not supported.
-
-    Features:
-        - Activation Checkpointing. This can be controlled using the ``enable_activation_checkpointing``
-            flag. Activation checkpointing helps reduce the memory footprint since we no longer keep
-            activations in memory and instead recompute them during the backward pass. This is especially
-            helpful for larger batch sizes when you're memory constrained. But these savings in memory
-            come at the cost of training performance. In most cases training can slow-down quite a bit as
-            a result of this activation recomputation.
-
-        - Activation Offloading. This can be controlled using the ``enable_activation_offloading``
-            flag. Activation offloading is a technique similar to activations checkpointing that helps
-            reduce the memory footprint to prevent OOMs on CUDA and enable bigger batches. Where activations
-            checkpointing drops the activation in the forward to recompute it later in the backward,
-            activations offloading will drop the activation in the forward to the CPU and bring it
-            back during the backward pass. As always, there is a tradeoff--these savings in memory can
-            come at the cost of training performance and CPU resources. To recover some runtime cost,
-            we've added an option to enable offloading on a different stream to permit overlapping with
-            the computation. This option is currently only available on PyTorch 2.5 or later and will
-            be enabled by default if an acceptable torch version is found. Activation offloading can be
-            used in conjunction with activation checkpointing.
-
-        - Precision. Full fp32 and bf16 training are supported. Precision is controlled using the ``dtype``
-            flag. When ``dtype=bf16``, all activations, gradients and optimizer states are in bfloat16. In
-            most cases this should halve the memory footprint of full precision (fp32) training, without
-            loss in model quality (will depend on the model, training data and other settings). For
-            GPUs which do not support bfloat16, we fall back to fp32. Mixed precision training and fp16
-            precision are currently not supported.
-
-        - Gradient Accumulation. You can simulate larger batch sizes by accumulating gradients. This is
-            controlled using the ``gradient_accumulation_steps`` flag.
-
-                Total Batch Size = batch_size * gradient accumulation steps.
-
-            For example: with batch_size=1 and gradient_accumulation_steps=32 we get a total batch size of 32.
-
-            Gradient accumulation is especially useful when you are memory constrained. In this case,
-            accumulating gradients might give you better training speed than enabling activation
-            checkpointing.
-
-        - Lower precision optimizers. This recipe supports lower-precision optimizers from the bitsandbytes
-            library (https://huggingface.co/docs/bitsandbytes/main/en/index). We've tested the recipe with
-            8-bit AdamW and Paged AdamW.
-
-        - Checkpointing. Model weights are checkpointed both at the end of each epoch and at the end of
-            training. Currently we checkpoint both the adapter weights (trainable params only) and the
-            complete merged weights (adapter weights added back to the base model). For more details
-            please take a look at our LoRA tutorial
-            (https://pytorch.org/torchtune/main/tutorials/lora_finetune.html).
-
-            Optimizer State and recipe state (seed, total_epochs, number of epochs run etc) are
-            only saved at the end of a given epoch and used in case of resuming training. Resuming
-            training is controlled by the ``resume_from_checkpoint`` flag. Mid-epoch checkpointing is
-            currently not supported.
-
-            For more details on the checkpointer, please take a look at
-            our checkpointer deepdive (https://pytorch.org/torchtune/main/tutorials/checkpointer.html).
-
-        - Logging. Terminal, Disk, WandB and TensorBoard are all supported.
-
-        - Gradient Clipping. Gradient clipping is supported using the ``clip_grad_norm`` flag. By default,
-            ``clip_grad_norm`` is set to ``None``. If you only want to log the grad norm, you can set
-            ``clip_grad_norm='inf'``.
-
-    For a full list of example configs for this recipe, run ``tune ls`` on the command line. Each config
-    has example commands for how to kick-off training.
-
-    Args:
-        cfg (DictConfig): OmegaConf object parsed from yaml file
-
-    Raises:
-        ValueError: If ``dtype`` is set to fp16.
-        RuntimeError: If ``dtype`` is set to bf16 and the hardware does not support bf16.
-        RuntimeError: If ``enable_activation_offloading`` is True and device is not CUDA.
-        RuntimeError: If ``enable_activation_offloading`` is True and ``enable_activation_checkpointing`` is False.
-        RuntimeError: If ``left_pad_sequence`` is set as the data collator
-
-    """
 
     def __init__(self, cfg: DictConfig) -> None:
         self._device = utils.get_device(device=cfg.device)
@@ -136,8 +63,6 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                 "fp16 precision is not supported in this recipe. Please use fp32 or bf16."
             )
 
-        print(cfg)
-        print(dir(cfg))
         
         # logging attributes
         self._output_dir = cfg.output_dir
@@ -251,10 +176,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             ) from e
 
     def setup(self, cfg: DictConfig) -> None:
-        """
-        Setup the recipe state. This includes recipe state (if resume_from_checkpoint is True),
-        model, tokenizer, loss, optimizer, learning rate scheduler, sampler, and dataloader.
-        """
+      
+      
         self._metric_logger = config.instantiate(cfg.metric_logger)
 
         # log config with parameter override
@@ -290,11 +213,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         self._optimizer = self._setup_optimizer(
             cfg_optimizer=cfg.optimizer,
-            opt_state_dict=(
-                checkpoint_dict[training.OPT_KEY]
-                if self._resume_from_checkpoint
-                else None
-            ),
+            opt_state_dict=(checkpoint_dict[training.OPT_KEY] if self._resume_from_checkpoint else None),
         )
 
         # initialize loss
@@ -319,16 +238,10 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             collate_fn=collate_name,
         )
 
-        # Finally update the recipe state which can only be correctly set after all of the
-        # other components have been initialized and updated.
 
-        # Number of training steps in each epoch depends on the number of batches produced
-        # by the dataloader and the max_steps_per_epoch param set by the user and is used
-        # for logging and tracking training state. This should be computed after the dataloader
-        # has been setup
         self._steps_per_epoch = (
             # implemented static LESS warmup percentage, so tqdm will regard total bar to desired warmup percentage. 
-            int(len(self._dataloader) // self._gradient_accumulation_steps) 
+            int(len(self._dataloader) // self._gradient_accumulation_steps * cfg.sampler.percentage) 
         )
         if (
             self.max_steps_per_epoch is not None
@@ -357,45 +270,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
     def _setup_profiler(
         self, cfg_profiler: Optional[DictConfig] = None
     ) -> Union[torch.profiler.profile, DummyProfiler]:
-        """
-        Parses the `profiler` section of top-level `cfg` and sets up profiler
-
-        Args:
-            cfg_profiler (Optional[DictConfig]): ``profiler`` section of the top-level ``cfg`` (the main config passed to
-                `recipe.main`). Default None.
-
-        Returns:
-            profiler: Union[torch.profiler.profile, DummyProfiler] - DummyProfiler is a nullcontext with no-op methods
-            for `start`, `stop`, and `step` that can be used in place of `torch.profiler.profile` if profiler is not enabled such
-            that the instrumented training loop does not need to be changed profiling is disabled.
-
-        The profiler config can be provided in configs under the `profiler` key with the following layout:
-
-        .. code-block:: yaml
-            profiler:
-                enabled: bool
-
-                #Output directory of trace artifacts
-                output_dir: str
-
-            #`torch.profiler.ProfilerActivity` types to trace
-            cpu: bool
-            cuda: bool
-
-                #Trace options
-                profile_memory: bool
-                with_stack: bool
-                record_shapes: bool
-                with_flops: bool
-
-            # `torch.profiler.schedule` options:
-            # wait_steps -> wait, warmup_steps -> warmup, active_steps -> active, num_cycles -> repeat
-            wait_steps: int
-            warmup_steps: int
-            active_steps: int
-            num_cycles: int
-        """
-
+        
+        
         # Missing profiler section in config, assume disabled
         if cfg_profiler is None:
             cfg_profiler = DictConfig({"enabled": False})
@@ -528,11 +404,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         batch_size: int,
         collate_fn: str,
     ) -> Tuple[SelectiveSampler, DataLoader]:
-        """
-        All data related setup happens here. Currently this recipe supports
-        SelectiveSampler with Map-style Datasets which fit into memory.
-        Other samplers, iterable datasets and streaming datasets are not supported.
-        """
+        
+        
         if isinstance(cfg_dataset, ListConfig):
             datasets = [
                 config.instantiate(single_cfg_dataset, self._tokenizer)
@@ -586,20 +459,12 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         return sampler, dataloader
 
-    def save_checkpoint(self, run, epoch: int) -> None:
-        """
-        Checkpoint the state of the recipe. The constructed checkpoint state dict
-        contains the following information:
-        - Merged weights with key MODEL_KEY
-        - Adapter weights with key ADAPTER_KEY
-        - Relevant recipe state if training is not complete
-        - If the `self._save_adapter_weights_only` option is True, the checkpointer will save only the adapter weights
-
-        To correctly resume from training, the adapter weights and recipe state must be provided along with the base model weights.
-        """
+    def save_checkpoint(self,epoch: int) -> None:
+       
+       
         ckpt_dict = {}
 
-        intermediate_checkpoint = epoch + 1 < self.total_epochs
+        intermediate_checkpoint = True # Always save every checkpoint
         # if training is in-progress, checkpoint the optimizer state as well
         if intermediate_checkpoint:
             ckpt_dict.update(
@@ -646,10 +511,15 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         self._checkpointer.save_checkpoint(
             ckpt_dict,
             epoch=epoch,
-            run=run,
             intermediate_checkpoint=intermediate_checkpoint,
             adapter_only=self._save_adapter_weights_only,
         )
+        
+    def save_recipe_state(self,epoch):
+        src_path = os.path.join(self._output_dir, "recipe_state/recipe_state.pt")
+        dst_path = os.path.join(self._output_dir, f"epoch_{epoch}/recipe_state.pt")
+        shutil.copy(src_path, dst_path)
+
 
     def _loss_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         # Shape [b, s], needed for the loss not the model
@@ -676,180 +546,175 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         return loss
 
     def train(self, cfg: DictConfig) -> None:
-        """
-        The core training loop.
-        """
 
         if self._compile:
-            log.info(
-                "NOTE: torch.compile is enabled and model is compiled in first forward. Expect a relatively slow first iteration."
-            )
+            log.info()
 
         # Initialize tokens count and running loss (for grad accumulation)
         t0 = time.perf_counter()
         running_loss = 0
         num_tokens = 0
-
+        avg_lr_epochs = []  # List to store learning rates
+        
         with self._profiler as prof:
-            with radt.run.RADTBenchmark() as run:
+            for curr_epoch in range(self.epochs_run, self.total_epochs):
                 
-                run.autolog()
-                def log_config(run, cfg: DictConfig, directory: str) -> None:
-                    for k, v in cfg.items():
-                        if isinstance(v, DictConfig):
-                            log_config(run, v, f"{directory}.{k}")
-                        else:
-                            run.log_param(f"{directory}.{k}", v)
-
-                # Log config
-                recipe_location = sys.argv[sys.argv.index("--config") + 1]
-                run.log_artifact(recipe_location, "config")
-                log_config(run, cfg, "config")                
+                learning_rates = []  # List to store learning rates
+                # Append the initial learning rate at the start of each epoch
+                learning_rates.append(self._optimizer.param_groups[0]["lr"])
                 
-                # self.epochs_run should be non-zero when we're resuming from a checkpoint
-                for curr_epoch in range(self.epochs_run, self.total_epochs):
-                    # Update the sampler to ensure data is correctly shuffled across epochs
-                    # in case shuffle is True
-                    self._sampler.set_epoch(curr_epoch)
-
-                    pbar = tqdm(total=self._steps_per_epoch)
-                    self._sampler.pre_epoch()
+                # Update the sampler to ensure data is correctly shuffled across epochs
+                # in case shuffle is True
+                self._sampler.set_epoch(curr_epoch) if not cfg.same_shuffle_every_epoch else 0
+                self._sampler.pre_epoch()
+                
+                if cfg.n_print_examples is not None:
+                    sample_count = 0
                     for idx, batch in enumerate(self._dataloader):
-                        if (
-                            self.max_steps_per_epoch is not None
-                            and (idx // self._gradient_accumulation_steps)
-                            == self.max_steps_per_epoch
-                        ):
+                        if sample_count >= cfg.n_print_examples:
                             break
-
-                        self._sampler.on_batch(idx, batch)
-
-                        # Start tracking CUDA memory for active steps for just the first epoch
-                        if (
-                            curr_epoch == 0
-                            and self.profiler_profile_memory
-                            and idx
-                            == self.profiler_wait_steps + self.profiler_warmup_steps
-                        ):
-                            torch.cuda.memory._record_memory_history()
-
-                        utils.batch_to_device(batch, self._device)
-
-                        # Calculate the number of unmasked tokens in the current batch
-                        # and increment the total number of tokens seen in the step
-                        current_num_tokens = (
-                            batch["labels"] != self._loss_fn.ignore_index
-                        ).sum()
-                        num_tokens += current_num_tokens
-
-                        # Loss is normalized by default so we multiply by the number of tokens
-                        # This way we can normalize by the total number of tokens if we're accumulating gradients
-                        current_loss = self._loss_step(batch) * current_num_tokens
-
-                        self._sampler.after_forward(idx, batch, current_loss)
-
-                        running_loss += current_loss
-                        current_loss.backward()
-
-                        # Step with optimizer
-                        if (idx + 1) % self._gradient_accumulation_steps == 0:
-                            training.scale_grads(self._model, 1 / num_tokens)
-                            if self._clip_grad_norm is not None:
-                                grad_norm = torch.nn.utils.clip_grad_norm_(
-                                    self._model.parameters(),
-                                    max_norm=float(self._clip_grad_norm),
-                                )
-                            self._optimizer.step()
-                            self._optimizer.zero_grad(set_to_none=True)
-                            self._lr_scheduler.step()
-                            # Update the number of steps when the weights are updated
-                            self.global_step += 1
-
-                            loss_to_log = running_loss.item() / num_tokens
-                            pbar.update(1)
-                            pbar.set_description(
-                                f"{curr_epoch + 1}|{self.global_step}|Loss: {loss_to_log}"
+                        for sample in batch.get("tokens"):
+                            if sample_count >= cfg.n_print_examples:
+                                break
+                            decoded = self._tokenizer.decode(sample.tolist(), skip_special_tokens=True)
+                            sample_count += 1
+                            print(f"\n--- Sample {sample_count} from dataloader decoded ---")
+                            print(decoded)
+                
+                pbar = tqdm(total=self._steps_per_epoch)
+                for idx, batch in enumerate(self._dataloader):
+                    if (
+                        self.max_steps_per_epoch is not None
+                        and (idx // self._gradient_accumulation_steps)
+                        == self.max_steps_per_epoch
+                    ):
+                        break
+                    self._sampler.on_batch(idx, batch)
+                    # Start tracking CUDA memory for active steps for just the first epoch
+                    if (
+                        curr_epoch == 0
+                        and self.profiler_profile_memory
+                        and idx
+                        == self.profiler_wait_steps + self.profiler_warmup_steps
+                    ):
+                        torch.cuda.memory._record_memory_history()
+                    utils.batch_to_device(batch, self._device)
+                    # Calculate the number of unmasked tokens in the current batch
+                    # and increment the total number of tokens seen in the step
+                    current_num_tokens = (
+                        batch["labels"] != self._loss_fn.ignore_index
+                    ).sum()
+                    num_tokens += current_num_tokens
+                    # Loss is normalized by default so we multiply by the number of tokens
+                    # This way we can normalize by the total number of tokens if we're accumulating gradients
+                    current_loss = self._loss_step(batch) * current_num_tokens
+                    self._sampler.after_forward(idx, batch, current_loss)
+                    running_loss += current_loss
+                    current_loss.backward()
+                    # Step with optimizer
+                    if (idx + 1) % self._gradient_accumulation_steps == 0:
+                        training.scale_grads(self._model, 1 / num_tokens)
+                        if self._clip_grad_norm is not None:
+                            grad_norm = torch.nn.utils.clip_grad_norm_(
+                                self._model.parameters(),
+                                max_norm=float(self._clip_grad_norm),
                             )
-
-                            # Log per-step metrics
-                            if self.global_step % self._log_every_n_steps == 0:
-                                time_per_step = time.perf_counter() - t0
-                                log_dict = {
-                                    "loss": loss_to_log,
-                                    "lr": self._optimizer.param_groups[0]["lr"],
-                                    "tokens_per_second_per_gpu": num_tokens
-                                    / time_per_step,
-                                }
-                                if (
-                                    self._device.type == "cuda"
-                                    and self._log_peak_memory_stats
-                                ):
-                                    log_dict.update(
-                                        training.get_memory_stats(device=self._device)
-                                    )
-                                if self._clip_grad_norm is not None:
-                                    log_dict.update({"grad_norm": grad_norm})
-                                self._metric_logger.log_dict(
-                                    log_dict,
-                                    step=self.global_step,
-                                )
-                                log_dict["epoch"] = curr_epoch
-                                mlflow_dict = {f"ML - {k}": v for k, v in log_dict.items()}
-                                run.log_metrics(mlflow_dict, epoch=curr_epoch)
-
-                            # Reset running stats for the next step
-                            running_loss = 0
-                            num_tokens = 0
-                            t0 = time.perf_counter()
-
-                        # Stop tracking CUDA memory now that active steps are complete
-                        if (
-                            curr_epoch == 0
-                            and self.profiler_profile_memory
-                            and idx
-                            == self.profiler_wait_steps
-                            + self.profiler_warmup_steps
-                            + self.profiler_active_steps
-                        ):
-                            torch.cuda.memory._record_memory_history(enabled=None)
-
-                        # Step the profiler
-                        # Note we are stepping each batch, which might not include optimizer step in the trace
-                        # if the schedule cycle doesn't align with gradient accumulation.
-                        prof.step()
-
-                    self._sampler.post_epoch()
-
-                    self.epochs_run += 1
-                    start_save_checkpoint = time.perf_counter()
-                    log.info("Starting checkpoint save...")
-                    self.save_checkpoint(run=run, epoch=curr_epoch)
-                    log.info(
-                        "Checkpoint saved in {:.2f} seconds.".format(
-                            time.perf_counter() - start_save_checkpoint
+                        self._optimizer.step()
+                        self._optimizer.zero_grad(set_to_none=True)
+                        self._lr_scheduler.step()
+                        # Update the number of steps when the weights are updated
+                        self.global_step += 1
+                        
+                        # Append current learning rate after optimizer step
+                        learning_rates.append(self._optimizer.param_groups[0]["lr"])
+                        loss_to_log = running_loss.item() / num_tokens
+                        pbar.update(1)
+                        pbar.set_description(
+                            f"{curr_epoch + 1}|{self.global_step}|Loss: {loss_to_log}"
                         )
+                        # Log per-step metrics
+                        if self.global_step % self._log_every_n_steps == 0:
+                            time_per_step = time.perf_counter() - t0
+                            log_dict = {
+                                "loss": loss_to_log,
+                                "lr": self._optimizer.param_groups[0]["lr"],
+                                "tokens_per_second_per_gpu": num_tokens
+                                / time_per_step,
+                            }
+                            if (
+                                self._device.type == "cuda"
+                                and self._log_peak_memory_stats
+                            ):
+                                log_dict.update(
+                                    training.get_memory_stats(device=self._device)
+                                )
+                            if self._clip_grad_norm is not None:
+                                log_dict.update({"grad_norm": grad_norm})
+                            self._metric_logger.log_dict(
+                                log_dict,
+                                step=self.global_step,
+                            )
+                        # Reset running stats for the next step
+                        running_loss = 0
+                        num_tokens = 0
+                        t0 = time.perf_counter()
+                    # Stop tracking CUDA memory now that active steps are complete
+                    if (
+                        curr_epoch == 0
+                        and self.profiler_profile_memory
+                        and idx
+                        == self.profiler_wait_steps
+                        + self.profiler_warmup_steps
+                        + self.profiler_active_steps
+                    ):
+                        torch.cuda.memory._record_memory_history(enabled=None)
+                    prof.step()
+                self._sampler.post_epoch()
+                
+                # Calculate and log the average learning rate after all epochs
+                if learning_rates:
+                    avg_lr = sum(learning_rates) / len(learning_rates)
+                    avg_lr_epochs.append(avg_lr)
+                
+                self.epochs_run += 1
+                start_save_checkpoint = time.perf_counter()
+                log.info("Starting checkpoint save...")
+                # self.save_checkpoint(run=run, epoch=curr_epoch)
+                
+                # Update the recipe state
+                self.save_checkpoint(epoch=curr_epoch)
+                # Save the current recipe state for the current epoch, at each epoch path
+                
+                # In LESS we want to save the optimizer state for every epoch
+                self.save_recipe_state(epoch=curr_epoch)
+                
+                log.info(
+                    "Checkpoint saved in {:.2f} seconds.".format(
+                        time.perf_counter() - start_save_checkpoint
                     )
+                )
+                
+            # Save the average learning rates for all epochs to a CSV file
+            dir = os.path.join(self._output_dir, "avg_lr_epochs.csv")
+            with open(dir, mode='w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(["Epoch", "Average_Learning_Rate"])
+                for epoch, avg_lr in enumerate(avg_lr_epochs):
+                    writer.writerow([epoch + 1, avg_lr])
 
     def cleanup(self) -> None:
         self._metric_logger.close()
 
 
-@config.parse
-def recipe_main(cfg: DictConfig) -> None:
-    """
-    Entry point for the recipe.
-
-    Configurable parameters are read in the following order:
-        - Parameters specified in config (see available configs through ``tune ls``)
-        - Overwritten by arguments from the command-line
-    """
+def train_warmup_model(cfg: DictConfig = "less/config/llama3_2/step1_train_warmup_model.yaml") -> None:
+    
+    cfg = OmegaConf.load(cfg)
     config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
     recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
     recipe.setup(cfg=cfg)
-    # recipe.train(cfg=cfg)
-    # Here the recipe must build the gradstore instead of training.
+    recipe.train(cfg=cfg)
     recipe.cleanup()
 
 
 if __name__ == "__main__":
-    sys.exit(recipe_main())
+    sys.exit(train_warmup_model())
