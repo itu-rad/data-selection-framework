@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=lora_eval    # Job name
-#SBATCH --output=hpc/output/lora_eval.out       # Output file
+#SBATCH --output=hpc/output/lora_eval2.out       # Output file
 #SBATCH --cpus-per-task=8                  # CPU cores per task (adjust based on your needs)
-#SBATCH --gres=gpu:v100                     # Request certain GPU
+#SBATCH --gres=gpu:a30                    # Request certain GPU
 #SBATCH --mem=64G
 #SBATCH --time=72:00:00                         # Run for up to 3 days
 #SBATCH --partition=acltr                       # Run on GPU queue
