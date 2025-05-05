@@ -1,10 +1,10 @@
 import sys
-from less.step1_train_warmup_model import train_warmup_model
-from less.step2_1_get_training_gradstore import get_training_gradstore
-from less.step2_2_get_validation_gradstore import get_validation_gradstore 
-from less.step3_1_get_influence_scores import get_influence_scores
-from less.step3_2_select_top_k import select_top_k
-from less.step4_train_selected_data import train_selected_data
+from step1_train_warmup_model import train_warmup_model
+from step2_1_get_training_gradstore import get_training_gradstore
+from step2_2_get_validation_gradstore import get_validation_gradstore 
+from step3_1_get_influence_scores import get_influence_scores
+from step3_2_select_top_k import select_top_k
+from step4_train_selected_data import train_selected_data
 
 
 # define which LESS substep to begin with
@@ -46,6 +46,7 @@ if less_step == 3.2 and less_stop >= 3.2:
     print("Starting step 3.2 of LESS: Selecting and writing the top-k data samples...")
     select_top_k()
     less_step = 4 
+    
 # Step 4: Train with your selected data
 if less_step == 4 and less_stop >= 4:
     print("doing step 4 of LESS") 

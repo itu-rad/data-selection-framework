@@ -16,3 +16,4 @@ dependencies:
       - torchtune
       - bitsandbytes
       - lm_eval==0.4.*
+      - traker[fast]==0.1.3 # for LESS
