@@ -177,5 +177,6 @@ cython_debug/
 /less/gradstore/
 /less/influence_scores
 /less/cache_dir
+/less/selected_data
 # radT environment init
 environment.sh

@@ -242,7 +242,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         # setup after all of these are setup
         collate_name = cfg.get("collate_fn", "torchtune.data.padded_collate_sft")
         self._dataloader = self._setup_data(
-            cfg_dataset=cfg.dataset,
+            cfg=cfg,
             batch_size=cfg.batch_size,
             collate_fn=collate_name,
         )
@@ -410,13 +410,19 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
     
     def _setup_data(
         self,
-        cfg_dataset: DictConfig, 
+        cfg,
         batch_size: int,
         collate_fn: str,
     ) -> Tuple[DataLoader]:
     
         
-        def preprocess_ds(ds_path, data_dir, split, subtask_column1, subtask_column2=None):
+        def preprocess_ds(cfg):
+            
+            ds_path=cfg.dataset.source
+            data_dir=cfg.dataset.data_dir
+            split=cfg.dataset.split
+            subtask_column1=cfg.dataset.subtask_column1
+            subtask_column2=cfg.dataset.subtask_column2
             
             ds = load_dataset(path=ds_path, data_dir=data_dir, split=split)
 
@@ -430,10 +436,13 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                 expected_keys = set(ex[subtask_column1] for ex in ds)
 
             unique_examples = {}
-            for example in ds:
+            for i, example in enumerate(ds):
                 key = get_key(example)
                 if key not in unique_examples:
-                    unique_examples[key] = example
+                    # Add the enumeration index to the example
+                    example_with_index = dict(example)
+                    example_with_index["index"] = i
+                    unique_examples[key] = example_with_index
                 if len(unique_examples) == len(expected_keys):
                     break
                 
@@ -448,11 +457,19 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                 print(f"Expected length: {len(expected_keys)}")
                 sys.exit()
 
-            cache_dir_path = "less/cache_dir"
-            os.makedirs(cache_dir_path, exist_ok=True)
-            mini_ds_name = os.path.basename(ds_path)
-            mini_ds_path = os.path.join(cache_dir_path, mini_ds_name + ".json")
+            # cache_dir_path = "less/cache_dir"
+            # os.makedirs(cache_dir_path, exist_ok=True)
+            # mini_ds_name = os.path.basename(ds_path)
+            # mini_ds_path = os.path.join(cache_dir_path, mini_ds_name + ".json")
 
+            # print(f"Saving mini_ds as JSON to {mini_ds_path}")
+            # mini_ds.to_json(mini_ds_path, orient="records", lines=True)
+            
+            dir_path = cfg.output_dir
+            os.makedirs(dir_path, exist_ok=True)
+            mini_ds_name = os.path.basename(ds_path)
+            mini_ds_path = os.path.join(dir_path, mini_ds_name + "_subtask_samples.json")
+            
             print(f"Saving mini_ds as JSON to {mini_ds_path}")
             mini_ds.to_json(mini_ds_path, orient="records", lines=True)
 
@@ -460,14 +477,14 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                 
            
     
-        mini_ds_path = preprocess_ds(cfg_dataset.source,cfg_dataset.data_dir,cfg_dataset.split, cfg_dataset.subtask_column1, cfg_dataset.subtask_column2)
+        mini_ds_path = preprocess_ds(cfg)
         
                 
 
         ds = instruct_dataset(tokenizer=self._tokenizer,
                               source="json",
                               data_files=mini_ds_path,
-                              column_map = {"input": cfg_dataset.input_column, "output": cfg_dataset.output_column})
+                              column_map = {"input": cfg.dataset.input_column, "output": cfg.dataset.output_column})
         
         
         
@@ -750,7 +767,20 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             # projected_gradients
             full_grads = []  # full gradients
             projected_grads = {dim: [] for dim in proj_dim}  # projected gradients
-
+            
+            if cfg.n_print_examples is not None:
+                    sample_count = 0
+                    for idx, batch in enumerate(self._dataloader):
+                        if sample_count >= cfg.n_print_examples:
+                            break
+                        for sample in batch.get("tokens"):
+                            if sample_count >= cfg.n_print_examples:
+                                break
+                            decoded = self._tokenizer.decode(sample.tolist(), skip_special_tokens=True)
+                            sample_count += 1
+                            print(f"\n--- Sample {sample_count} from dataloader decoded ---")
+                            print(decoded)
+                            
             for batch in tqdm(self._dataloader, total=len(self._dataloader)):
                 self.prepare_batch(batch)
                 count += 1

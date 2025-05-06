@@ -67,9 +67,6 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             raise ValueError(
                 "fp16 precision is not supported in this recipe. Please use fp32 or bf16."
             )
-
-        print(cfg)
-        print(dir(cfg))
         
         # logging attributes
         self._output_dir = cfg.output_dir
@@ -709,12 +706,26 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             full_grads = []  # full gradients
             projected_grads = {dim: [] for dim in proj_dim}  # projected gradients
 
+            if cfg.n_print_examples is not None:
+                    sample_count = 0
+                    for idx, batch in enumerate(self._dataloader):
+                        if sample_count >= cfg.n_print_examples:
+                            break
+                        for sample in batch.get("tokens"):
+                            if sample_count >= cfg.n_print_examples:
+                                break
+                            decoded = self._tokenizer.decode(sample.tolist(), skip_special_tokens=True)
+                            sample_count += 1
+                            print(f"\n--- Sample {sample_count} from dataloader decoded ---")
+                            print(decoded)
+                            
             for batch in tqdm(self._dataloader, total=len(self._dataloader)):
                 self.prepare_batch(batch)
                 count += 1
 
                 if count <= max_index:
-                    print("skipping count", count)
+                    if count == max_index:
+                        print("skipped to count", count)
                     continue
                 
                 if cfg.gradient_type == "adam":

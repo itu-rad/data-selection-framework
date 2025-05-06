@@ -68,7 +68,7 @@ def compute_influence_scores(cfg):
                 
             print(f"Shape of influence_scores:{influence_scores.shape}")    
             # Step 1: Reshape
-            reshaped = influence_scores.reshape(influence_scores.shape[0], num_gradients[validation_task], -1)
+            reshaped = influence_scores.reshape(influence_scores.shape[0], num_gradients, -1)
             print("After reshape:", reshaped.shape)  # Shape: [A, B, C]
 
             # Step 2: Mean over last dim
@@ -106,7 +106,7 @@ def get_avg_lr_csv(cfg):
     # return changed cfg
     
     return cfg 
-def get_influence_scores(cfg: DictConfig = "less/config/llama3_2/step3.1_get_influence_scores.yaml"):
+def get_influence_scores(cfg: DictConfig = "less/config/llama3_2/step3_1_get_influence_scores.yaml"):
     
     cfg = OmegaConf.load(cfg)
     changed_config1 = get_avg_lr_csv(cfg)

@@ -147,12 +147,12 @@ def sort_scores(cfg, score_paths, num_samples, target_task_name):
     
     # Save the sorted scores in a csv
     sorted_score_file = os.path.join(cfg.output_path, target_task_name, f"sorted.csv")  
-    if not os.path.exists(sorted_score_file):
-        with open(sorted_score_file, 'x', encoding='utf-8',) as file:
-            file.write("file name, index, score\n")
-            for score, index, name in zip(sorted_scores, sorted_file_specific_index, sorted_data_from):
-                file.write(
-                    f"{cfg.dataset_names[name.item()]}, {index.item()}, {round(score.item(), 6)}\n")
+    # if not os.path.exists(sorted_score_file): # only write csv if it doesnt exist
+    with open(sorted_score_file, 'w', encoding='utf-8',) as file:
+        file.write("file name, index, score\n")
+        for score, index, name in zip(sorted_scores, sorted_file_specific_index, sorted_data_from):
+            file.write(
+                f"{cfg.dataset_names[name.item()]}, {index.item()}, {round(score.item(), 6)}\n")
                 
                 
     return sorted_file_specific_index, sorted_data_from

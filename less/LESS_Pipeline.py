@@ -8,10 +8,10 @@ from step4_train_selected_data import train_selected_data
 
 
 # define which LESS substep to begin with
-less_step = 1
+less_step = 3.2
 # define which LESS substep to stop at
 less_stop = 4
-"""Set mask to select all samples before each epoch starts"""
+
 
 # LESS Data Selection Pipeline: https://github.com/princeton-nlp/LESS
 print("Starting LESS data selection pipeline")

@@ -40,9 +40,9 @@ tokenizer:
 
 checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
-  checkpoint_dir: model_cache/less/warmup_models/llama3_2_1B/  # Let this be the folder where the model's epochs are saved and set checkpoints to select which to use.      
+  checkpoint_dir: model_cache/less/warmup_models/${model_name}  # Let this be the folder where the model's epochs are saved and set checkpoints to select which to use.      
   checkpoint_files: [
-     ft-model-00001-of-00001.safetensors
+     model-00001-of-00001.safetensors
   ]
   adapter_checkpoint: adapter_model.pt
   recipe_checkpoint: recipe_state.pt
@@ -58,6 +58,7 @@ dataset:
   packed: False  # True increases speed
 seed: null
 shuffle: True
+n_print_examples: 3
 batch_size: 1 # LESS default = 1
 
 # Optimizer and Scheduler

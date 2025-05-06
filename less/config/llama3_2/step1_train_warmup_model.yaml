@@ -1,4 +1,4 @@
-model_name: llama3_2_1B_instruct
+model_name: llama3_2_3B_instruct
 output_dir: model_cache/less/warmup_models/${model_name}/
 
 sampler:
@@ -7,7 +7,7 @@ sampler:
 
 # Model Arguments
 model:
-  _component_: torchtune.models.llama3_2.lora_llama3_2_1b
+  _component_: torchtune.models.llama3_2.lora_llama3_2_3b
   lora_attn_modules: ['q_proj', 'k_proj', 'v_proj', 'output_proj'] # LESS default = q_proj k_proj v_proj output_proj
   apply_lora_to_mlp: True # LESS default = True
   lora_rank: 128  # LESS default = 128
@@ -17,14 +17,15 @@ model:
 # Tokenizer
 tokenizer:
   _component_: torchtune.models.llama3.llama3_tokenizer
-  path: model_cache/downloaded_models/Llama-3.2-1B-Instruct/original/tokenizer.model
+  path: model_cache/downloaded_models/Llama-3.2-3B-Instruct/original/tokenizer.model
   max_seq_len: 2048 # LESS default = 2048
 
 checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
-  checkpoint_dir: model_cache/downloaded_models/Llama-3.2-1B-Instruct/
+  checkpoint_dir: model_cache/downloaded_models/Llama-3.2-3B-Instruct/
   checkpoint_files: [
-     model.safetensors
+     model-00001-of-00002.safetensors,
+     model-00002-of-00002.safetensors
   ]
   recipe_checkpoint: null
   output_dir: ${output_dir}

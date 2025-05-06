@@ -7,15 +7,16 @@ output_dir: ./ # Not needed
 
 # Model Arguments
 model:
-  _component_: torchtune.models.llama3_2.llama3_2_1b
+  _component_: torchtune.models.llama3_2.llama3_2_3b
 
 checkpointer:
   _component_: misc.checkpointer.radTFullModelHFCheckpointer
 # local dir, to find checkout
 # If you are using a ML-flow model define its local checkpoint dir here. 
-  checkpoint_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/full_single_device/epoch_0/
+  checkpoint_dir: model_cache/finetuned_models/Llama-3.2-3B-Instruct/epoch_0
   checkpoint_files: [
-    ft-model-00001-of-00001.safetensors,
+    ft-model-00001-of-00002.safetensors,
+    ft-model-00002-of-00002.safetensors
   ]
   output_dir: ${output_dir}
   model_type: LLAMA3_2
@@ -25,7 +26,7 @@ checkpointer:
 # Tokenizer
 tokenizer:
   _component_: torchtune.models.llama3.llama3_tokenizer
-  path:  model_cache/downloaded_models/Llama-3.2-1B-Instruct/original/tokenizer.model
+  path:  model_cache/downloaded_models/Llama-3.2-3B-Instruct/original/tokenizer.model
   max_seq_len: null
 
 # Environment
@@ -34,7 +35,7 @@ dtype: bf16
 seed: 1234 # It is not recommended to change this seed, b/c it matches EleutherAI's default seed
 
 # EleutherAI specific eval args
-tasks: ["truthfulqa_mc2"]
+tasks: ["truthfulqa_mc2", "commonsense_qa"]
 limit: null
 max_seq_length: 4096
 batch_size: 8

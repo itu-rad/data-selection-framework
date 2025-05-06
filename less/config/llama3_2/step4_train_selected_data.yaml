@@ -1,8 +1,9 @@
 model_name: llama3_2_1B_instruct
 validation_set_name: truthful_qa
+top_k_percentage: 0.50
 
-dataset_dir: less/selected_data/${model_name}/${validation_set_name}/top_p0.5.json
-output_dir: model_cache/less/finetuned_models/${model_name}/
+dataset_dir: less/selected_data/${model_name}/${validation_set_name}/top_p${top_k_percentage}.json
+output_dir: model_cache/less/finetuned_models/${model_name}/top_p${top_k_percentage}
 
 sampler:
   _component_: selection.FullSampler # Full sampler is simply utilized to select the entire preselected data samples as a dataset. 
@@ -44,7 +45,7 @@ seed: 42
 shuffle: True
 same_shuffle_every_epoch: True
 n_print_examples: 3
-batch_size: 1 # LESS default = 1
+
 
 
 # Optimizer and Scheduler
@@ -62,8 +63,9 @@ loss:
 
 # Training
 epochs: 4 # LESS default = 4
+batch_size: 32 # LESS default = 1
 max_steps_per_epoch: null # LESS default = unknown
-gradient_accumulation_steps: 32  # Use to increase effective batch size # LESS default = 32
+gradient_accumulation_steps: 1  # Use to increase effective batch size # LESS default = 32
 clip_grad_norm: null
 compile: False  # torch.compile the model + loss, True increases speed + decreases memory
 
