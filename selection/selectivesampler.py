@@ -1,6 +1,16 @@
+import contextlib
 import math
+import torch
 from abc import ABC, abstractmethod
 from torch.utils.data import DistributedSampler
+from torchtune import config, modules, training, utils
+from enum import Enum
+
+
+class Phase(Enum):
+    NO_PHASE_SUPPORT = 0
+    SCORING = 1
+    TRAINING = 2
 
 
 class SelectiveSampler(DistributedSampler, ABC):
@@ -44,7 +54,7 @@ class SelectiveSampler(DistributedSampler, ABC):
         self.no_grad_scoring = False
 
         self.has_scoring_phase = False
-        self.sampling = False
+        self.phase = Phase.NO_PHASE_SUPPORT
         self.sampling_indices = None
         self.sampling_ratio = sampling_ratio
         self.num_passes = num_passes
@@ -66,7 +76,7 @@ class SelectiveSampler(DistributedSampler, ABC):
         # Keep in mind that the RNG comes from the data loader shuffling indices, not the mask itself
         # This means that the mask is applied after the shuffling
         # Keeping the same mask between epochs does not guarantee same data elements
-        if self.sampling:
+        if self.is_sampling:
             return iter(self.sampling_indices[self.sampling_start : self.sampling_end])
 
         indices = self.get_iterator()
@@ -82,7 +92,7 @@ class SelectiveSampler(DistributedSampler, ABC):
         return iter(indices)
 
     def __len__(self) -> int:
-        if self.sampling:
+        if self.is_sampling:
             return self.sampling_end - self.sampling_start
 
         if self.mask is not None:
@@ -96,7 +106,10 @@ class SelectiveSampler(DistributedSampler, ABC):
         # Reset the loss buffer and mask at the start of each scoring phase.
         n = len(self.dataset)
         mask = [True] * n
-        self.sampling = True
+
+        if self.phase != Phase.NO_PHASE_SUPPORT:
+            self.phase = Phase.SCORING
+
         self.sampling_start = selection_pass * n // self.num_passes
         self.sampling_end = (selection_pass + 1) * n // self.num_passes
 
@@ -104,7 +117,18 @@ class SelectiveSampler(DistributedSampler, ABC):
 
     def _prepare_training_phase(self):
         # Disable sampling mode
-        self.sampling = False
+        if self.phase != Phase.NO_PHASE_SUPPORT:
+            self.phase = Phase.TRAINING
+
+    def score(self, recipe, idx, batch):  # requires implementation of inform_logits
+        utils.batch_to_device(batch, recipe._device)
+        no_grad_mgr = (
+            torch.inference_mode() if self.no_grad_scoring else contextlib.nullcontext()
+        )
+        with no_grad_mgr:
+            logits, shifted_labels = recipe._forward_pass(batch)
+            sample_ids = batch["sample_ids"].tolist()
+            self.inform_logits(sample_ids, logits, shifted_labels)
 
     def get_iterator(self):
         """Get the iterator for the dataset. This is used to get the indices for the sampler."""
@@ -120,9 +144,9 @@ class SelectiveSampler(DistributedSampler, ABC):
         """Hook called before each sampling phase. Must be implemented by subclasses."""
         pass
 
-    @abstractmethod
-    def score(self, recipe, idx, batch):
-        pass
+    # @abstractmethod
+    # def score(self, recipe, idx, batch):
+    #     pass
 
     @abstractmethod
     def on_training_phase(self) -> None:

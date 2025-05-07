@@ -1,7 +1,5 @@
-import contextlib
 import copy
 import torch
-from torchtune import config, modules, training, utils
 from selection.selectivesampler import SelectiveSampler
 
 
@@ -57,16 +55,6 @@ class LossSampler(SelectiveSampler):
     def on_scoring_phase(self) -> None:
         """Hook called before each scoring phase. Must be implemented by subclasses."""
         self._loss_buffer = {}
-
-    def score(self, recipe, idx, batch):
-        utils.batch_to_device(batch, recipe._device)
-        no_grad_mgr = (
-            torch.inference_mode() if self.no_grad_scoring else contextlib.nullcontext()
-        )
-        with no_grad_mgr:
-            logits, shifted_labels = recipe._forward_pass(batch)
-            sample_ids = batch["sample_ids"].tolist()
-            self.inform_logits(sample_ids, logits, shifted_labels)
 
     def inform_logits(
         self, sample_ids: list[int], logits: torch.Tensor, shifted_labels: torch.Tensor
