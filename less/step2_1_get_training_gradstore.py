@@ -3,7 +3,20 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
+"""
+step2_1_get_training_gradstore
+=======================
 
+**Overview**
+
+The purpose of this step is to compute the gradients of the model's loss function with respect to the model's
+parameters on the training data. These gradients are used to compute the influence scores for each data sample.
+
+
+**Returns**
+
+* A "training_grads" filled with gradients files for the training data.
+"""
 import copy
 import sys
 import os
@@ -619,10 +632,10 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
     def collect_grads(self, cfg: DictConfig) -> None:
             """
-            Collects gradients from the model during evaluation and saves them to disk.
+            Collects gradients from the model from training loss evaluation and saves them to disk.
 
             Args:
-                dataloader (torch.utils.data.DataLoader): The data loader for evaluation dataset.
+                dataloader (torch.utils.data.DataLoader): The data loader for training loss evaluation.
                 model (torch.nn.Module): The model from which gradients will be collected.
                 output_dir (str): The directory where the gradients will be saved.
                 proj_dim List[int]: The dimensions of the target projectors. Each dimension will be saved in a separate folder.
@@ -822,13 +835,37 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             mlflow.log_artifact(local_path=output_file, artifact_path=subpath)
     
 def set_dataset_output_dir(cfg):
-    # Add dataset name to the output dir
+    """
+    Add dataset name to the output dir.
+
+    Args:
+        cfg (DictConfig): Config file
+
+    Returns:
+        DictConfig: Config file with updated output dir
+    """
     component = cfg.dataset._component_
     dataset = component.split('.')[-1]
     cfg.output_dir = os.path.join(cfg.output_dir, f"{dataset}")
     return cfg
     
 def set_checkpoint_paths(cfg):
+    """
+    Updates the checkpoint paths in the configuration with full paths.
+
+    This function modifies the given configuration by setting the full paths
+    for the adapter checkpoint and the recipe state checkpoint. It constructs
+    the full paths by joining the current working directory, the checkpoint
+    directory, and the respective file names from the configuration. The updated
+    paths are then assigned back to the configuration.
+
+    Args:
+        cfg (DictConfig): Configuration object containing the checkpointer 
+                          settings with adapter and recipe checkpoints.
+
+    Returns:
+        DictConfig: The updated configuration with full paths for checkpoints.
+    """
     # get current directory
     current_dir = os.getcwd()
     
@@ -851,8 +888,15 @@ def set_checkpoint_paths(cfg):
     return cfg
 
 def multiple_checkpoints(cfg):
-    # Create a DictConfig for each individual checkpoint
-    
+    """
+    Create a DictConfig for each individual checkpoint
+
+    Args:
+        cfg (DictConfig): Config file
+
+    Returns:
+        List[DictConfig]: List of configs for each checkpoint
+    """
     cfgs = [] # A list to keep all the configs for each checkpoint
     for ckpt in cfg.checkpoints:
         
@@ -869,6 +913,18 @@ def multiple_checkpoints(cfg):
     return cfgs 
     
 def get_training_gradstore(cfg: DictConfig = "less/config/llama3_2/step2_1_get_training_gradstore.yaml") -> None:
+    """
+    Collects the training gradients for all the checkpoints specified in the
+    config file. The gradients are saved in the output directory specified in
+    the config file.
+
+    Args:
+        cfg: A DictConfig containing the configuration for training. The default
+            value is "less/config/llama3_2/step2_1_get_training_gradstore.yaml".
+
+    Returns:
+        None
+    """
     cfg = OmegaConf.load(cfg)
     cfg = set_dataset_output_dir(cfg)
      

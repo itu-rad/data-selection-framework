@@ -1,3 +1,32 @@
+"""
+step3_2_select_top_k
+=============
+
+**Overview**
+
+The purpose of this script is to select the top-k data samples for each target task 
+based on their influence scores. 
+
+
+**Implementation Details**
+
+* `get_dataset`: Load the dataset.
+* `select_data_amount`: Determine the amount of data to be selected based on configuration.
+* `setup`: Set up the configuration for the selection process.
+* `sort_scores`: Sort the influence scores and return the sorted indices.
+* `select_and_write_samples`: Select and write the top-k data samples.
+* `select_top_k`: Main function that calls the other functions to select the top-k data samples.
+
+**Parameters**
+
+* `cfg`: The configuration file that specifies the training parameters, 
+including the dataset, model architecture, and hyperparameters.
+
+**Returns**
+None, but creates top-k data files for each target task.
+"""
+
+
 import json
 import os
 import mlflow
@@ -103,6 +132,19 @@ def setup(cfg, target_task_name):
 
 def sort_scores(cfg, score_paths, num_samples, target_task_name): 
 
+    """
+    Sort the influence scores and return the sorted indices.
+
+    Args:
+    cfg (DictConfig): The configuration dictionary.
+    score_paths (list): A list of paths to the influence score files.
+    num_samples (list): A list of the number of samples in each influence score file.
+    target_task_name (str): The name of the target task.
+
+    Returns:
+    sorted_file_specific_index (torch.Tensor): A tensor of indices that keeps track of samples' index in their origin dataset.
+    sorted_data_from (torch.Tensor): A tensor that keeps track of samples' origin dataset.
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Create a tensor of influence scores from all datasets
@@ -167,6 +209,25 @@ def sort_scores(cfg, score_paths, num_samples, target_task_name):
 
 def select_and_write_samples(cfg, sorted_file_specific_index, sorted_data_from, num_samples, top_k, target_task_name):
 
+    """
+    Select and write the top-k data samples to a JSON file.
+
+    This function extracts the top-k data samples based on sorted indices and writes 
+    them to a JSON file for a specific target task. It logs the written file as an artifact 
+    if an MLflow run is active.
+
+    Args:
+    cfg (DictConfig): The configuration dictionary containing paths and parameters.
+    sorted_file_specific_index (torch.Tensor): Tensor of indices indicating positions 
+        within their respective datasets.
+    sorted_data_from (torch.Tensor): Tensor indicating the dataset each sample originates from.
+    num_samples (list): A list of the number of samples in each dataset.
+    top_k (int): The top-k number of samples to select.
+    target_task_name (str): The name of the target task.
+
+    Returns:
+    None
+    """
     datasets = get_dataset(cfg)
     
     # Extract top_k from both tensors
@@ -191,6 +252,27 @@ def select_and_write_samples(cfg, sorted_file_specific_index, sorted_data_from, 
 
 def select_top_k(cfg:DictConfig="./less/config/llama3_2/step3_2_select_top_k.yaml") -> None:
     
+    """
+    Select the top-k data samples for each target task based on influence scores.
+
+    This function is part of the LoRAFinetuneRecipeSingleDevice recipe.
+
+    Parameters
+    ----------
+    cfg : DictConfig
+        The configuration dictionary.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    We loop over each target task name in the configuration dictionary,
+    and for each target task name, it calls the setup, sort_scores, and
+    select_and_write_samples functions to select the top-k data samples
+    based on influence scores and write them to a file.
+    """
     cfg = OmegaConf.load(cfg)
  
     # Loop over each target task name

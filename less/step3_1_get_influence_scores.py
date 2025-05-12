@@ -1,4 +1,22 @@
+"""
+step3_1_get_influence_scores
+=====================
 
+**Overview**
+
+The purpose of this script is to calculate the influence score for each training dataset 
+for each validation task. The influence scores represents the impact of each training sample 
+on the validation task.
+
+
+**Parameters**
+
+* `cfg`: The configuration file that specifies the training parameters, including the dataset, model architecture, and hyperparameters.
+
+**Returns**
+
+* The influence scores for each training dataset for each validation task.
+"""
 import os
 import sys
 import csv
@@ -25,7 +43,18 @@ def calculate_influence_score(training_info: torch.Tensor, validation_info: torc
     return influence_scores
 
 def renormalize_avg_lr(cfg) -> None:
-    # renormalize the checkpoint weights
+    """
+    If the sum of the checkpoint weights is not 1, then renormalize them so that
+    they do sum to 1. This is useful for when the model is trained on multiple
+    datasets and the weights need to be adjusted based on the number of samples
+    in each dataset.
+
+    Args:
+        cfg (DictConfig): The configuration dictionary.
+
+    Returns:
+        None
+    """
     if sum(cfg.checkpoint_avg_lr) != 1:
         s = sum(cfg.checkpoint_avg_lr)
         cfg.checkpoint_avg_lr = [i/s for i in cfg.checkpoint_avg_lr]
@@ -35,7 +64,16 @@ def renormalize_avg_lr(cfg) -> None:
     
     
 def compute_influence_scores(cfg):
-    # calculate the influence score for each training dataset for each validation task
+    """
+    Calculate the influence score for each training dataset for each validation task.
+
+    Args:
+        cfg (DictConfig): The configuration dictionary.
+
+    Returns:
+        None
+    """
+    
     for train_file_name in cfg.train_file_names:
         for validation_task in cfg.validation_task_name :
             influence_scores = 0
@@ -101,6 +139,15 @@ def compute_influence_scores(cfg):
 
 
 def get_avg_lr_csv(cfg): 
+    """
+    Reads the average learning rate from a csv file.
+    
+    Args:
+        cfg (DictConfig): The configuration object containing the path to the csv file.
+    
+    Returns:
+        DictConfig: The updated configuration object with the average learning rate.
+    """
     avg_lr_path = cfg.avg_lr_path
     
     with open(avg_lr_path, newline='') as csvfile:

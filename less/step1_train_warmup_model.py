@@ -3,8 +3,23 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
+"""
+step1_train_warmup_model
+=========================
 
-# import radt
+**Overview**
+
+This recipe utilizes the TorchTune library to implement the LoRA finetuning step of the LESS data selection pipeline. 
+It loads a pre-trained model, applies LoRA to adapt the model and finetunes the adapted model 
+on a predefined percentage of training data. 
+
+**Returns**
+
+* The finetuned model and the selected data samples.
+"""
+
+
+import radt
 import csv
 import sys
 import os
@@ -730,6 +745,21 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
 def train_warmup_model(cfg: DictConfig = "less/config/llama3_2/step1_train_warmup_model.yaml") -> None:
     
+    """
+    Trains a warmup model using the provided configuration.
+
+    Args:
+        cfg (DictConfig): Configuration for training, which can be a file path to
+        a YAML configuration file. Defaults to "less/config/llama3_2/step1_train_warmup_model.yaml".
+        
+    The function performs the following steps:
+    1. Loads the configuration from the specified YAML file.
+    2. Logs the configuration using the log_config function.
+    3. Sets up and trains the model using the LoRAFinetuneRecipeSingleDevice class.
+    4. Cleans up resources after training.
+    5. Saves the configuration to 'train_config.yaml' in the specified output directory.
+    """
+
     cfg = OmegaConf.load(cfg)
     config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
     recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)

@@ -1,8 +1,22 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
+"""
+step4_train_select_top_k
+=============
+
+**Overview**
+
+The purpose of this script is to train a model using the top-k data samples
+selected in step 3.2 and herafter evaluate the model performance on the target task.
+
+**Parameters**
+
+* `cfg`: The configuration file that specifies the training parameters, including the dataset, 
+   model architecture, and hyperparameters, `top_k_data_dir`: The directory containing the top-k data samples selected in the previous step.
+
+**Returns**
+
+* `trained_model`: The trained model saved to a file.
+* `evaluation_results`: The evaluation results of the trained model on the target task.
+"""
 
 # import radt
 import csv
@@ -719,6 +733,18 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
 def train_selected_data(cfg: DictConfig = "less/config/llama3_2/step4_train_selected_data.yaml") -> None:
     
+    """
+    Train a model on the selected data samples for each target task.
+
+    Parameters
+    ----------
+    cfg : DictConfig
+        The configuration dictionary.
+
+    Returns
+    -------
+    None, but a trained model is saved to a file.
+    """
     cfg = OmegaConf.load(cfg)
     config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
     recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)    
