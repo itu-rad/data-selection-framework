@@ -13,9 +13,9 @@ checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
 # local dir, to find checkout
 # If you are using a ML-flow model define its local checkpoint dir here. 
-  checkpoint_dir: model_cache/less/finetuned_models/llama3_2_1B_instruct/top_p0.05/epoch_0
+  checkpoint_dir: model_cache/less/finetuned_models/llama3_2_1B_instruct_warmup_steps_fixed/top_p0.25/epoch_3
   checkpoint_files: [
-    model-00001-of-00001.safetensors,
+    ft-model-00001-of-00001.safetensors,
   ]
   output_dir: ${output_dir}
   model_type: LLAMA3_2
@@ -34,10 +34,10 @@ dtype: bf16
 seed: 1234 # It is not recommended to change this seed, b/c it matches EleutherAI's default seed
 
 # EleutherAI specific eval args
-tasks: ["commonsense_qa"]
+tasks: ["truthfulqa_mc2","commonsense_qa"]
 limit: null
 max_seq_length: 4096
-batch_size: 8
+batch_size: 32
 enable_kv_cache: True
 
 # Quantization specific args

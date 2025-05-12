@@ -1,7 +1,7 @@
 # Config for running the InferenceRecipe in generate.py to generate output from an LLM
 #
 # To launch, run the following command from root torchtune directory:
-#    tune run generate --config generation
+#    tune run generate --config custom_generation_config.yaml
 
 output_dir: ./ # Not needed
 
@@ -12,9 +12,9 @@ model:
 
 checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
-  checkpoint_dir: /tmp/Llama-3.2-1B-Instruct/
+  checkpoint_dir: model_cache/less/finetuned_models/llama3_2_1B_instruct/top_p0.5/epoch_0
   checkpoint_files: [
-    model.safetensors
+    model-00001-of-00001.safetensors
   ]
   output_dir: ${output_dir}
   model_type: LLAMA3_2
@@ -29,7 +29,7 @@ seed: 1234 # It is not recommended to change this seed, b/c it matches EleutherA
 # Tokenizer
 tokenizer:
   _component_: torchtune.models.llama3.llama3_tokenizer
-  path:  /tmp/Llama-3.2-1B-Instruct/original/tokenizer.model
+  path:  model_cache/downloaded_models/Llama-3.2-1B-Instruct/original/tokenizer.model
   max_seq_len: null
   prompt_template: null
 
@@ -37,7 +37,7 @@ tokenizer:
 # Generation arguments; defaults taken from gpt-fast
 prompt:
   system: null
-  user: "Tell me a joke."
+  user: "Give me three tips for staying healthy"
 max_new_tokens: 300
 temperature: 0.6 # 0.8 and 0.6 are popular values to try
 top_k: 300

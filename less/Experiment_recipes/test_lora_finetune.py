@@ -4,6 +4,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import json
+import os
 import radt
 import sys
 import time
@@ -14,7 +16,7 @@ from warnings import warn
 
 import torch
 import torchtune.modules.common_utils as common_utils
-from omegaconf import DictConfig, ListConfig
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from torch import nn
 from torch.optim import Optimizer
@@ -326,10 +328,13 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         # by the dataloader and the max_steps_per_epoch param set by the user and is used
         # for logging and tracking training state. This should be computed after the dataloader
         # has been setup
-        self._steps_per_epoch = (
+        n_data_samples = len(self._dataloader)
+        if hasattr(cfg.sampler, "percentage"):
+            n_data_samples = int(n_data_samples * cfg.sampler.percentage)
+        self._steps_per_epoch = int(
             # implemented static LESS warmup percentage, so tqdm will regard total bar to desired warmup percentage. 
-            int(len(self._dataloader) // self._gradient_accumulation_steps) 
-        )
+            n_data_samples // self._gradient_accumulation_steps) 
+        
         if (
             self.max_steps_per_epoch is not None
             and self.max_steps_per_epoch < self._steps_per_epoch
@@ -710,10 +715,40 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                 for curr_epoch in range(self.epochs_run, self.total_epochs):
                     # Update the sampler to ensure data is correctly shuffled across epochs
                     # in case shuffle is True
-                    self._sampler.set_epoch(curr_epoch)
+                    self._sampler.set_epoch(curr_epoch) if not cfg.same_shuffle_every_epoch else 0
+                    self._sampler.pre_epoch()
+
+                    if cfg.n_print_examples is not None:
+                        sample_count = 0
+                        samples = []  # To store the samples
+                        for idx, batch in enumerate(self._dataloader):
+                            if sample_count >= cfg.n_print_examples:
+                                break
+                            for sample in batch.get("tokens"):
+                                if sample_count >= cfg.n_print_examples:
+                                    break
+                                decoded = self._tokenizer.decode(sample.tolist(), skip_special_tokens=True)
+                                print(f"\n--- Sample {sample_count} from dataloader decoded ---")
+                                print(decoded)
+                                samples.append({"Dataloader_sample": sample_count, "decoded_text": decoded})
+                                sample_count += 1
+                    
+                        # Save samples to a JSON file
+                        if samples:
+                            # Ensure the output directory exists
+                            save_samples_dir = os.path.join(cfg.output_dir, f"epoch_{curr_epoch}")
+                            os.makedirs(save_samples_dir, exist_ok=True)
+                            
+                            # Define the file path
+                            save_samples_path = os.path.join(save_samples_dir, f"epoch_{curr_epoch}_example_samples.json")
+                            
+                            # Write the samples to the file
+                            with open(save_samples_path, 'w') as json_file:
+                                json.dump(samples, json_file, indent=4)
+                            
+                            print(f"Examples saved to {save_samples_path}")
 
                     pbar = tqdm(total=self._steps_per_epoch)
-                    self._sampler.pre_epoch()
                     for idx, batch in enumerate(self._dataloader):
                         if (
                             self.max_steps_per_epoch is not None
@@ -812,11 +847,12 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                             + self.profiler_active_steps
                         ):
                             torch.cuda.memory._record_memory_history(enabled=None)
-
+                            
                         # Step the profiler
                         # Note we are stepping each batch, which might not include optimizer step in the trace
                         # if the schedule cycle doesn't align with gradient accumulation.
                         prof.step()
+                        torch.cuda.empty_cache()
 
                     self._sampler.post_epoch()
 
@@ -851,6 +887,18 @@ def recipe_main(cfg: DictConfig) -> None:
     recipe.train(cfg=cfg)
     print("starting test_lora_finetune cleanup()")
     recipe.cleanup()
+    
+    # Write the loaded config to the output directory specified in cfg.output_dir as 'train_config.yaml'
+    output_dir = cfg.output_dir  # Assuming `cfg.output_dir` exists in your config
+    
+    # Ensure the directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Define the output file path
+    output_file = os.path.join(output_dir, "train_config.yaml")
+    
+    # Save the configuration to YAML file
+    OmegaConf.save(cfg, output_file)
 
 
 if __name__ == "__main__":

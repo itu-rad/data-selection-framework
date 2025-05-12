@@ -14,7 +14,7 @@
 #   tune run lora_finetune_single_device --config llama3_2/1B_lora_single_device checkpointer.checkpoint_dir=<YOUR_CHECKPOINT_DIR>
 #
 # This config works only for training on single device.
-model_name: llama3_2_1B_instruct
+model_name: llama3_2_1B_instruct_warmup_steps_fixed
 output_dir: ./less/gradstore/${model_name}/training_grads
 
 checkpoints: [0,1,2,3] # A list of which epochs to be used (epochs start from 0)
@@ -42,7 +42,7 @@ checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
   checkpoint_dir: model_cache/less/warmup_models/${model_name}  # Let this be the folder where the model's epochs are saved and set checkpoints to select which to use.      
   checkpoint_files: [
-     model-00001-of-00001.safetensors
+     ft-model-00001-of-00001.safetensors
   ]
   adapter_checkpoint: adapter_model.pt
   recipe_checkpoint: recipe_state.pt
@@ -57,7 +57,7 @@ dataset:
   _component_: torchtune.datasets.alpaca_cleaned_dataset
   packed: False  # True increases speed
 seed: null
-shuffle: True
+shuffle: False
 n_print_examples: 3
 batch_size: 1 # LESS default = 1
 

@@ -1,5 +1,6 @@
 import json
 import os
+import mlflow
 import torch
 import sys
 from torchtune import config
@@ -147,12 +148,17 @@ def sort_scores(cfg, score_paths, num_samples, target_task_name):
     
     # Save the sorted scores in a csv
     sorted_score_file = os.path.join(cfg.output_path, target_task_name, f"sorted.csv")  
-    # if not os.path.exists(sorted_score_file): # only write csv if it doesnt exist
-    with open(sorted_score_file, 'w', encoding='utf-8',) as file:
-        file.write("file name, index, score\n")
-        for score, index, name in zip(sorted_scores, sorted_file_specific_index, sorted_data_from):
-            file.write(
-                f"{cfg.dataset_names[name.item()]}, {index.item()}, {round(score.item(), 6)}\n")
+    if not os.path.exists(sorted_score_file): # only write csv if it doesnt exist
+        with open(sorted_score_file, 'w', encoding='utf-8',) as file:
+            file.write("file name, index, score\n")
+            for score, index, name in zip(sorted_scores, sorted_file_specific_index, sorted_data_from):
+                file.write(
+                    f"{cfg.dataset_names[name.item()]}, {index.item()}, {round(score.item(), 6)}\n")
+                
+        if mlflow.active_run():
+            subpath = sorted_score_file.split("selected_data", 1)[1]  # Get everything after the first "selected_data"
+            subpath = "selected_data" + subpath
+            mlflow.log_artifact(local_path=sorted_score_file, artifact_path=subpath)
                 
                 
     return sorted_file_specific_index, sorted_data_from
@@ -177,6 +183,11 @@ def select_and_write_samples(cfg, sorted_file_specific_index, sorted_data_from, 
     collected_data= [datasets[data_from][index] for index, data_from in zip(final_index_list, final_data_from)]
     with open(top_k_path, 'w', encoding='utf-8', errors='ignore') as file:
         json.dump(collected_data,file)
+    
+    if mlflow.active_run():
+        subpath = top_k_path.split("selected_data", 1)[1]  # Get everything after the first "selected_data"
+        subpath = "selected_data" + subpath
+        mlflow.log_artifact(local_path=top_k_path, artifact_path=subpath)
 
 def select_top_k(cfg:DictConfig="./less/config/llama3_2/step3_2_select_top_k.yaml") -> None:
     

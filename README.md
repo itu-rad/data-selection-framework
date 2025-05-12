@@ -120,7 +120,7 @@ Or with LoRA:
 
 ```bash
 tune run recipe/eval.py --config config/llama3_2/1b_lora/eval_base.yaml
-tune run recipe/eval.py --config config/llama3_2/1b_lora/eval_finetuned.yaml
+tune run recipe/eval.py --config less/config/llama3_2/1b_lora/eval_finetuned.yaml
 ```
 
 &nbsp;

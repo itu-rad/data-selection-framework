@@ -1,4 +1,4 @@
-model_name: llama3_2_1B_instruct
+model_name: llama3_2_1B_instruct_warmup_steps_fixed
 output_path: ./less/selected_data/${model_name}
 
 influence_score_path: ./less/influence_scores/${model_name}
@@ -8,4 +8,4 @@ dataset_paths: [yahma/alpaca-cleaned]
 dataset_names: [alpaca_cleaned_dataset]
 split: train
 max_samples: 
-percentage: 0.50  
+percentage: 0.5  

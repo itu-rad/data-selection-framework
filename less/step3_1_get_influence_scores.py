@@ -3,11 +3,13 @@ import os
 import sys
 import csv
 
+import mlflow
 from omegaconf import DictConfig, OmegaConf
 import torch
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+N_SUBTASKS = {"mmlu": 57, "bbh": 27, "tydiqa": 9, "truthful_qa": 66}
 
 def calculate_influence_score(training_info: torch.Tensor, validation_info: torch.Tensor):
     """Calculate the influence score.
@@ -52,8 +54,7 @@ def compute_influence_scores(cfg):
                 # load validation gradients
                 validation_path = os.path.join(cfg.validation_gradient_path,validation_task,f"epoch_{ckpt}",f"dim{cfg.gradient_projection_dimension}","all_orig.pt")
                 validation_info = torch.load(validation_path)
-                num_gradients = validation_info.shape[0]
-                print(f"NOTICE num_gradients: {num_gradients}")
+
                
     
                 if not torch.is_tensor(validation_info):
@@ -65,23 +66,24 @@ def compute_influence_scores(cfg):
                 influence_scores += cfg.checkpoint_avg_lr[i] * calculate_influence_score(
                 training_info=training_info, validation_info=validation_info)
                 
-                
-            print(f"Shape of influence_scores:{influence_scores.shape}")    
-            # Step 1: Reshape
-            reshaped = influence_scores.reshape(influence_scores.shape[0], num_gradients, -1)
+            # Shape of influence scores will be n_samples x n_subtasks
+            print(f"Shape of influence_scores:{influence_scores.shape}")   
+             
+            # Step 1: Reshape to 3D in case each subtask has more than 1 example task with associated
+            reshaped = influence_scores.reshape(influence_scores.shape[0], N_SUBTASKS[validation_task], -1)
             print("After reshape:", reshaped.shape)  # Shape: [A, B, C]
 
-            # Step 2: Mean over last dim
+            # Step 2: Mean over last dim to get influence score of each subtask's n_examples
             meaned = reshaped.mean(dim=-1)
             print("After mean:", meaned.shape)  # Shape: [A, B]
 
-            # Step 3: Max over last dim
+            # Step 3: Max over last dim, selecting the sample's most impactful subtask influence score as the score
             maxed = meaned.max(dim=-1)  # Returns a namedtuple (values, indices)
             print("After max:", maxed)
             print("Max values:", maxed.values.shape)  # Shape: [A]
             print("Max indices:", maxed.indices.shape)  # Shape: [A]
 
-            # Step 4: Take only the values (index 0 of the namedtuple)
+            # Step 4: Take only all the values (index[0]) of the namedtuple
             influence_scores = maxed.values
             print("Final influence_score:", influence_scores.shape)
 
@@ -91,6 +93,10 @@ def compute_influence_scores(cfg):
             output_file = os.path.join(output_dir, f"{train_file_name}_influence_scores.pt")
             print(f"Saving influence score to {output_file}")
             torch.save(influence_scores, output_file)
+            if mlflow.active_run():
+                subpath = output_file.split("influence_scores", 1)[1]  # Get everything after the first "influence_scores"
+                subpath = "influence_scores" + subpath
+                mlflow.log_artifact(local_path=output_file, artifact_path=subpath)
 
 
 

@@ -7,6 +7,8 @@
 import copy
 import sys
 import os
+
+import mlflow
 # Add the parent directory to sys.path so Python can find 'selection'
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -852,6 +854,10 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         torch.save(merged_data, output_file)
         print(
             f"Saving the normalized {prefix} (Shape: {merged_data.shape}) to {output_file}.")
+        if mlflow.active_run():
+            subpath = output_file.split("validation_grads", 1)[1]  # Get everything after the first "validation_grads"
+            subpath = "validation_grads" + subpath
+            mlflow.log_artifact(local_path=output_file, artifact_path=subpath)
 
 
 
@@ -871,6 +877,10 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         torch.save(merged_data, output_file)
         print(
             f"Saving the unnormalized {prefix} (Shape: {merged_data.shape}) to {output_file}.")
+        if mlflow.active_run():
+            subpath = output_file.split("validation_grads", 1)[1]  # Get everything after the first "validation_grads"
+            subpath = "validation_grads" + subpath
+            mlflow.log_artifact(local_path=output_file, artifact_path=subpath)
 
 
 def set_dataset_output_dir(cfg):

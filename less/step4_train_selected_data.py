@@ -8,6 +8,8 @@
 import csv
 import sys
 import os
+
+import radt
 # Add the parent directory to sys.path so Python can find 'selection'
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -458,7 +460,7 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
 
         return sampler, dataloader
 
-    def save_checkpoint(self,epoch: int) -> None:
+    def save_checkpoint(self, run, epoch: int) -> None:
        
        
         ckpt_dict = {}
@@ -475,8 +477,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                     training.MAX_STEPS_KEY: self.max_steps_per_epoch,
                 }
             )
-        # else:  # otherwise: save to mlflow if available
-        #     run.pytorch.log_model(self._model, "model")
+        else:  # otherwise: save to mlflow if available
+            run.pytorch.log_model(self._model, "model")
 
         adapter_state_dict = get_adapter_state_dict(self._model.state_dict())
         ckpt_dict.update({training.ADAPTER_KEY: adapter_state_dict})
@@ -556,150 +558,160 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         avg_lr_epochs = []  # List to store learning rates
         
         with self._profiler as prof:
-            for curr_epoch in range(self.epochs_run, self.total_epochs):
+             with radt.run.RADTBenchmark() as run:
                 
-                learning_rates = []  # List to store learning rates
-                # Append the initial learning rate at the start of each epoch
-                learning_rates.append(self._optimizer.param_groups[0]["lr"])
-                
-                # Update the sampler to ensure data is correctly shuffled across epochs
-                # in case shuffle is True
-                self._sampler.set_epoch(curr_epoch) if not cfg.same_shuffle_every_epoch else 0
-                self._sampler.pre_epoch()
-                
-                if cfg.n_print_examples is not None:
-                    sample_count = 0
-                    for idx, batch in enumerate(self._dataloader):
-                        if sample_count >= cfg.n_print_examples:
-                            break
-                        for sample in batch.get("tokens"):
+                def log_config(run, cfg: DictConfig, directory: str) -> None:
+                    for k, v in cfg.items():
+                        if isinstance(v, DictConfig):
+                            log_config(run, v, f"{directory}.{k}")
+                        else:
+                            run.log_param(f"{directory}.{k}", v)
+
+                # Log config
+                recipe_location = sys.argv[sys.argv.index("--config") + 1]
+                run.log_artifact(recipe_location, "config")
+                log_config(run, cfg, "config")   
+
+                for curr_epoch in range(self.epochs_run, self.total_epochs):
+
+                    learning_rates = []  # List to store learning rates
+                    # Append the initial learning rate at the start of each epoch
+                    learning_rates.append(self._optimizer.param_groups[0]["lr"])
+
+                    # Update the sampler to ensure data is correctly shuffled across epochs
+                    # in case shuffle is True
+                    self._sampler.set_epoch(curr_epoch) if not cfg.same_shuffle_every_epoch else 0
+                    self._sampler.pre_epoch()
+
+                    if cfg.n_print_examples is not None:
+                        sample_count = 0
+                        for idx, batch in enumerate(self._dataloader):
                             if sample_count >= cfg.n_print_examples:
                                 break
-                            decoded = self._tokenizer.decode(sample.tolist(), skip_special_tokens=True)
-                            sample_count += 1
-                            print(f"\n--- Sample {sample_count} from dataloader decoded ---")
-                            print(decoded)
-                
-                pbar = tqdm(total=self._steps_per_epoch)
-                for idx, batch in enumerate(self._dataloader):
-                    if (
-                        self.max_steps_per_epoch is not None
-                        and (idx // self._gradient_accumulation_steps)
-                        == self.max_steps_per_epoch
-                    ):
-                        break
-                    self._sampler.on_batch(idx, batch)
-                    # Start tracking CUDA memory for active steps for just the first epoch
-                    if (
-                        curr_epoch == 0
-                        and self.profiler_profile_memory
-                        and idx
-                        == self.profiler_wait_steps + self.profiler_warmup_steps
-                    ):
-                        torch.cuda.memory._record_memory_history()
-                    utils.batch_to_device(batch, self._device)
-                    # Calculate the number of unmasked tokens in the current batch
-                    # and increment the total number of tokens seen in the step
-                    current_num_tokens = (
-                        batch["labels"] != self._loss_fn.ignore_index
-                    ).sum()
-                    num_tokens += current_num_tokens
-                    # Loss is normalized by default so we multiply by the number of tokens
-                    # This way we can normalize by the total number of tokens if we're accumulating gradients
-                    current_loss = self._loss_step(batch) * current_num_tokens
-                    self._sampler.after_forward(idx, batch, current_loss)
-                    running_loss += current_loss
-                    current_loss.backward()
-                    # Step with optimizer
-                    if (idx + 1) % self._gradient_accumulation_steps == 0:
-                        training.scale_grads(self._model, 1 / num_tokens)
-                        if self._clip_grad_norm is not None:
-                            grad_norm = torch.nn.utils.clip_grad_norm_(
-                                self._model.parameters(),
-                                max_norm=float(self._clip_grad_norm),
-                            )
-                        self._optimizer.step()
-                        self._optimizer.zero_grad(set_to_none=True)
-                        self._lr_scheduler.step()
-                        # Update the number of steps when the weights are updated
-                        self.global_step += 1
-                        
-                        # Append current learning rate after optimizer step
-                        learning_rates.append(self._optimizer.param_groups[0]["lr"])
-                        loss_to_log = running_loss.item() / num_tokens
-                        pbar.update(1)
-                        pbar.set_description(
-                            f"{curr_epoch + 1}|{self.global_step}|Loss: {loss_to_log}"
-                        )
-                        # Log per-step metrics
-                        if self.global_step % self._log_every_n_steps == 0:
-                            time_per_step = time.perf_counter() - t0
-                            log_dict = {
-                                "loss": loss_to_log,
-                                "lr": self._optimizer.param_groups[0]["lr"],
-                                "tokens_per_second_per_gpu": num_tokens
-                                / time_per_step,
-                            }
-                            if (
-                                self._device.type == "cuda"
-                                and self._log_peak_memory_stats
-                            ):
-                                log_dict.update(
-                                    training.get_memory_stats(device=self._device)
-                                )
+                            for sample in batch.get("tokens"):
+                                if sample_count >= cfg.n_print_examples:
+                                    break
+                                decoded = self._tokenizer.decode(sample.tolist(), skip_special_tokens=True)
+                                sample_count += 1
+                                print(f"\n--- Sample {sample_count} from dataloader decoded ---")
+                                print(decoded)
+
+                    pbar = tqdm(total=self._steps_per_epoch)
+                    for idx, batch in enumerate(self._dataloader):
+                        if (
+                            self.max_steps_per_epoch is not None
+                            and (idx // self._gradient_accumulation_steps)
+                            == self.max_steps_per_epoch
+                        ):
+                            break
+                        self._sampler.on_batch(idx, batch)
+                        # Start tracking CUDA memory for active steps for just the first epoch
+                        if (
+                            curr_epoch == 0
+                            and self.profiler_profile_memory
+                            and idx
+                            == self.profiler_wait_steps + self.profiler_warmup_steps
+                        ):
+                            torch.cuda.memory._record_memory_history()
+                        utils.batch_to_device(batch, self._device)
+                        # Calculate the number of unmasked tokens in the current batch
+                        # and increment the total number of tokens seen in the step
+                        current_num_tokens = (
+                            batch["labels"] != self._loss_fn.ignore_index
+                        ).sum()
+                        num_tokens += current_num_tokens
+                        # Loss is normalized by default so we multiply by the number of tokens
+                        # This way we can normalize by the total number of tokens if we're accumulating gradients
+                        current_loss = self._loss_step(batch) * current_num_tokens
+                        self._sampler.after_forward(idx, batch, current_loss)
+                        running_loss += current_loss
+                        current_loss.backward()
+                        # Step with optimizer
+                        if (idx + 1) % self._gradient_accumulation_steps == 0:
+                            training.scale_grads(self._model, 1 / num_tokens)
                             if self._clip_grad_norm is not None:
-                                log_dict.update({"grad_norm": grad_norm})
-                            self._metric_logger.log_dict(
-                                log_dict,
-                                step=self.global_step,
+                                grad_norm = torch.nn.utils.clip_grad_norm_(
+                                    self._model.parameters(),
+                                    max_norm=float(self._clip_grad_norm),
+                                )
+                            self._optimizer.step()
+                            self._optimizer.zero_grad(set_to_none=True)
+                            self._lr_scheduler.step()
+                            # Update the number of steps when the weights are updated
+                            self.global_step += 1
+
+                            # Append current learning rate after optimizer step
+                            learning_rates.append(self._optimizer.param_groups[0]["lr"])
+                            loss_to_log = running_loss.item() / num_tokens
+                            pbar.update(1)
+                            pbar.set_description(
+                                f"{curr_epoch + 1}|{self.global_step}|Loss: {loss_to_log}"
                             )
-                        # Reset running stats for the next step
-                        running_loss = 0
-                        num_tokens = 0
-                        t0 = time.perf_counter()
-                    # Stop tracking CUDA memory now that active steps are complete
-                    if (
-                        curr_epoch == 0
-                        and self.profiler_profile_memory
-                        and idx
-                        == self.profiler_wait_steps
-                        + self.profiler_warmup_steps
-                        + self.profiler_active_steps
-                    ):
-                        torch.cuda.memory._record_memory_history(enabled=None)
-                    prof.step()
-                self._sampler.post_epoch()
-                
-                # Calculate and log the average learning rate after all epochs
-                if learning_rates:
-                    avg_lr = sum(learning_rates) / len(learning_rates)
-                    avg_lr_epochs.append(avg_lr)
-                
-                self.epochs_run += 1
-                start_save_checkpoint = time.perf_counter()
-                log.info("Starting checkpoint save...")
-                # self.save_checkpoint(run=run, epoch=curr_epoch)
-                
-                # Update the recipe state
-                self.save_checkpoint(epoch=curr_epoch)
-                # Save the current recipe state for the current epoch, at each epoch path
-                
-                # In LESS we want to save the optimizer state for every epoch
-                self.save_recipe_state(epoch=curr_epoch)
-                
-                log.info(
-                    "Checkpoint saved in {:.2f} seconds.".format(
-                        time.perf_counter() - start_save_checkpoint
+                            # Log per-step metrics
+                            if self.global_step % self._log_every_n_steps == 0:
+                                time_per_step = time.perf_counter() - t0
+                                log_dict = {
+                                    "loss": loss_to_log,
+                                    "lr": self._optimizer.param_groups[0]["lr"],
+                                    "tokens_per_second_per_gpu": num_tokens
+                                    / time_per_step,
+                                }
+                                if (
+                                    self._device.type == "cuda"
+                                    and self._log_peak_memory_stats
+                                ):
+                                    log_dict.update(
+                                        training.get_memory_stats(device=self._device)
+                                    )
+                                if self._clip_grad_norm is not None:
+                                    log_dict.update({"grad_norm": grad_norm})
+                                self._metric_logger.log_dict(
+                                    log_dict,
+                                    step=self.global_step,
+                                )
+                                log_dict["epoch"] = curr_epoch
+                                mlflow_dict = {f"ML - {k}": v for k, v in log_dict.items()}
+                                run.log_metrics(mlflow_dict, epoch=curr_epoch)
+                                
+                            # Reset running stats for the next step
+                            running_loss = 0
+                            num_tokens = 0
+                            t0 = time.perf_counter()
+                        # Stop tracking CUDA memory now that active steps are complete
+                        if (
+                            curr_epoch == 0
+                            and self.profiler_profile_memory
+                            and idx
+                            == self.profiler_wait_steps
+                            + self.profiler_warmup_steps
+                            + self.profiler_active_steps
+                        ):
+                            torch.cuda.memory._record_memory_history(enabled=None)
+                        prof.step()
+                    self._sampler.post_epoch()
+
+                    # Calculate and log the average learning rate after all epochs
+                    if learning_rates:
+                        avg_lr = sum(learning_rates) / len(learning_rates)
+                        avg_lr_epochs.append(avg_lr)
+
+                    self.epochs_run += 1
+                    start_save_checkpoint = time.perf_counter()
+                    log.info("Starting checkpoint save...")
+                    self.save_checkpoint(run=run, epoch=curr_epoch)
+
+                    # Update the recipe state
+                    # self.save_checkpoint(epoch=curr_epoch)
+                    # Save the current recipe state for the current epoch, at each epoch path
+
+                    # In LESS we want to save the optimizer state for every epoch
+                    self.save_recipe_state(epoch=curr_epoch)
+
+                    log.info(
+                        "Checkpoint saved in {:.2f} seconds.".format(
+                            time.perf_counter() - start_save_checkpoint
+                        )
                     )
-                )
-                
-            # Save the average learning rates for all epochs to a CSV file
-            dir = os.path.join(self._output_dir, "avg_lr_epochs.csv")
-            with open(dir, mode='w', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow(["Epoch", "Average_Learning_Rate"])
-                for epoch, avg_lr in enumerate(avg_lr_epochs):
-                    writer.writerow([epoch + 1, avg_lr])
 
     def cleanup(self) -> None:
         self._metric_logger.close()
@@ -709,10 +721,22 @@ def train_selected_data(cfg: DictConfig = "less/config/llama3_2/step4_train_sele
     
     cfg = OmegaConf.load(cfg)
     config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
-    recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
+    recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)    
     recipe.setup(cfg=cfg)
     recipe.train(cfg=cfg)
     recipe.cleanup()
+    
+    # Write the loaded config to the output directory specified in cfg.output_dir as 'train_config.yaml'
+    output_dir = cfg.output_dir  # Assuming `cfg.output_dir` exists in your config
+    
+    # Ensure the directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Define the output file path
+    output_file = os.path.join(output_dir, "train_config.yaml")
+    
+    # Save the configuration to YAML file
+    OmegaConf.save(cfg, output_file)
 
 
 if __name__ == "__main__":
