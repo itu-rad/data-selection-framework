@@ -14,41 +14,47 @@ class LossSampler(SelectiveSampler):
     def __init__(
         self,
         dataset,
+        batch_size: int,
         loss_fn: torch.nn.Module,
         num_replicas=None,
         rank=None,
         shuffle=True,
         seed=0,
         sampling_ratio: float = 0.5,
+        num_passes: float = -1,
     ):
         super().__init__(
-            dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed
+            dataset,
+            batch_size=batch_size,
+            num_replicas=num_replicas,
+            rank=rank,
+            shuffle=shuffle,
+            seed=seed,
+            sampling_ratio=sampling_ratio,
+            num_passes=num_passes,
         )
         self._per_sample_loss_fn = copy.deepcopy(loss_fn)
         if hasattr(self._per_sample_loss_fn, "reduction"):
             self._per_sample_loss_fn.reduction = "none"
-        self.sampling_ratio = sampling_ratio
+
         # loss_buffer is a dict mapping dataset index -> accumulated loss and token count.
         self._loss_buffer = {}  # {sample_id: (loss_sum, valid_tokens)}
         self.mask = None  # Boolean tensor of size len(dataset)
         self.no_grad_scoring = True
+        self.has_scoring_phase = True
 
     def pre_epoch(self) -> None:
-        # Reset the loss buffer and mask at the start of each epoch.
-        self._loss_buffer = {}
-        n = len(self.dataset)
-        mask = [True] * n
-        self.set_mask(mask)
-
-    def post_epoch(self) -> None:
         pass
 
     def on_batch(self, idx: int, batch: dict) -> None:
-        # No action here; we use inform_logits() for scoring.
         pass
 
     def after_forward(self, idx: int, batch: dict, current_loss: float) -> None:
         pass
+
+    def on_scoring_phase(self) -> None:
+        """Hook called before each scoring phase. Must be implemented by subclasses."""
+        self._loss_buffer = {}
 
     def inform_logits(
         self, sample_ids: list[int], logits: torch.Tensor, shifted_labels: torch.Tensor
@@ -77,7 +83,7 @@ class LossSampler(SelectiveSampler):
             else:
                 self._loss_buffer[sid] = (loss_val, count)
 
-    def sample(self) -> None:
+    def on_training_phase(self) -> None:
         """
         After the scoring pass, compute average loss per sample for all samples in _loss_buffer,
         compute selection probabilities, and update self.mask (Boolean tensor over dataset).
@@ -119,3 +125,6 @@ class LossSampler(SelectiveSampler):
         self.set_mask(mask)
 
         print(f"new mask sum = {sum(self.mask)}")
+
+    def post_epoch(self) -> None:
+        pass
