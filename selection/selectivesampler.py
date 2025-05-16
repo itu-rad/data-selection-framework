@@ -8,7 +8,7 @@ from enum import Enum
 
 
 class Phase(Enum):
-    NO_PHASE_SUPPORT = 0
+    ONLY_TRAINING_SUPPORT = 0
     SCORING = 1
     TRAINING = 2
 
@@ -54,7 +54,7 @@ class SelectiveSampler(DistributedSampler, ABC):
         self.no_grad_scoring = False
 
         self.has_scoring_phase = False
-        self.phase = Phase.NO_PHASE_SUPPORT
+        self.phase = Phase.ONLY_TRAINING_SUPPORT
         self.sampling_indices = None
         self.sampling_ratio = sampling_ratio
         self.num_passes = num_passes
@@ -103,12 +103,15 @@ class SelectiveSampler(DistributedSampler, ABC):
         self.sampling_indices = list(self.get_iterator())
 
     def _prepare_scoring_phase(self, selection_pass):
+        """Raises an exception if the sampler does not support scoring phase."""
         # Reset the loss buffer and mask at the start of each scoring phase.
         n = len(self.dataset)
         mask = [True] * n
 
-        if self.phase != Phase.NO_PHASE_SUPPORT:
-            self.phase = Phase.SCORING
+        if self.phase != Phase.ONLY_TRAINING_SUPPORT:
+            raise RuntimeError("Sampler does not support scoring phase")
+
+        self.phase = Phase.SCORING
 
         self.sampling_start = selection_pass * n // self.num_passes
         self.sampling_end = (selection_pass + 1) * n // self.num_passes
@@ -117,7 +120,7 @@ class SelectiveSampler(DistributedSampler, ABC):
 
     def _prepare_training_phase(self):
         # Disable sampling mode
-        if self.phase != Phase.NO_PHASE_SUPPORT:
+        if self.phase != Phase.ONLY_TRAINING_SUPPORT:
             self.phase = Phase.TRAINING
 
     def score(self, recipe, idx, batch):  # requires implementation of inform_logits
@@ -143,10 +146,6 @@ class SelectiveSampler(DistributedSampler, ABC):
     def on_scoring_phase(self) -> None:
         """Hook called before each sampling phase. Must be implemented by subclasses."""
         pass
-
-    # @abstractmethod
-    # def score(self, recipe, idx, batch):
-    #     pass
 
     @abstractmethod
     def on_training_phase(self) -> None:

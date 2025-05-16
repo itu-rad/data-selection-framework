@@ -725,6 +725,21 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             run.log_artifact(recipe_location, "config")
             log_config(run, cfg, "config")
 
+            """Data Selection:
+            The data selection framework introduces the notion of passes and phases
+            to support our two-phase sampling approach. The two phases are:
+                scoring phase
+
+
+            - epoch (N epochs)
+            |--- selection pass (1/n of full dataset/epoch)
+            |--|--- scoring phase
+            |--|--\--- forward pass
+            |--|--- training phase
+            |--|--|--- forward pass
+            \--\--\--- backward pass
+            """
+
             # self.epochs_run should be non-zero when we're resuming from a checkpoint
             for curr_epoch in range(self.epochs_run, self.total_epochs):
                 # Update the sampler to ensure data is correctly shuffled across epochs
@@ -734,32 +749,33 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 self._sampler._prepare_epoch()
                 self._sampler.pre_epoch()
 
-                # Sampling epochs: The sampler generates a mask (subset) of the dataset to run batches on.
-                # This is done in two passes: first pass is scoring, second pass is training.
-                # The scoring pass may not cover the entire epoch; in this case the two passes repeat.
-                # The amount of repetitions is determined by the sampler.
-                # Either by % of the dataset (e.g. 0.2 of the dataset for 5 passes) or total amount of passes.
-                for sampling_pass in range(
+                """Selection passes: The sampler generates a mask (subset) of the dataset to run batches on.
+                This is done in two phases: first phase is scoring, second phase is training.
+                The scoring pass may not cover the entire epoch; in this case the two passes repeat.
+                The amount of repetitions is determined by the sampler.
+                Either by % of the dataset (e.g. 0.2 of the dataset for 5 passes) or total amount of passes.
+                """
+                for selection_pass in range(
                     self._sampler.num_passes if self._sampler.has_scoring_phase else 1
                 ):
                     if self._sampler.has_scoring_phase:
                         # ----- 1: Scoring Phase -----
-                        self._sampler._prepare_scoring_phase(sampling_pass)
+                        self._sampler._prepare_scoring_phase(selection_pass)
                         self._sampler.on_scoring_phase()
                         self._set_steps_per_epoch()
                         utils.get_logger("DEBUG").info(
-                            "Starting scoring pass %d for epoch %d",
-                            sampling_pass,
+                            "Starting scoring for epoch:selection pass %d:%d",
                             curr_epoch,
+                            selection_pass,
                         )
                         mlflow_dict = {
-                            "ML - sampling epoch": sampling_pass,
-                            "ML - sampling": 1,
+                            "ML - selection pass": selection_pass,
+                            "ML - scoring": 1,  # Defines when scoring for diagnostics purposes
                         }
                         run.log_metrics(mlflow_dict, epoch=curr_epoch)
 
                         pbar = tqdm(
-                            desc=f"Scoring: {curr_epoch + 1}.{sampling_pass}",
+                            desc=f"Scoring: {curr_epoch + 1}.{selection_pass}",
                             total=self._steps_per_epoch,
                         )
                         for idx, batch in enumerate(self._dataloader):
@@ -775,11 +791,11 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                     self._set_steps_per_epoch()
                     utils.get_logger("DEBUG").info(
                         "Starting training pass %d for epoch %d",
-                        sampling_pass,
+                        selection_pass,
                         curr_epoch,
                     )
 
-                    # We need to re-setup the scheduler every epoch because the sampling changes `self._steps_per_epoch`
+                    # We need to re-setup the scheduler every epoch because the scoring changes `self._steps_per_epoch`
                     # Since we use `last_epoch` we don't lose state.
 
                     self._lr_scheduler = self._setup_lr_scheduler(
@@ -850,7 +866,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
 
                             if idx % 100 == 0:
                                 pbar.set_description(
-                                    f"Training: {curr_epoch + 1}.{sampling_pass}|Loss: {loss_to_log:.3f}",
+                                    f"Training: {curr_epoch + 1}.{selection_pass}|Loss: {loss_to_log:.3f}",
                                     refresh=False,
                                 )
                                 pbar.update(100)
