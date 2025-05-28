@@ -24,6 +24,7 @@ output_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/full_single_devic
 sampler:
   _component_: selection.LossSampler
   sampling_ratio: 0.1
+  num_passes: 10
 
 
 # Tokenizer
@@ -56,7 +57,7 @@ resume_from_checkpoint: False
 
 # Fine-tuning arguments
 batch_size: 4
-epochs: 1
+epochs: 2
 optimizer:
   _component_: bitsandbytes.optim.PagedAdamW8bit
   lr: 2e-5
