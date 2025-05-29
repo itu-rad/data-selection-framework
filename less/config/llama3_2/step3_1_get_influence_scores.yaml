@@ -1,4 +1,4 @@
-model_name: llama3_2_1B_instruct_warmup_steps_fixed
+model_name: llama3_2_1B_instruct
 output_dir: less/influence_scores/${model_name}
 checkpoints: [0,1,2,3]
 gradient_projection_dimension: 8192

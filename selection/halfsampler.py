@@ -13,8 +13,8 @@ class HalfSampler(SelectiveSampler):
     def pre_epoch(self) -> None:
         """Set mask to select first half of samples before each epoch starts"""
         n = len(self.dataset)
-        mask = [False] * n
-        mask[n // 2 :] = [True] * (n - n // 2)
+        mask = [True] * n
+        mask[n // 2 :] = [False] * (n - n // 2)
         self.set_mask(mask)
 
     def post_epoch(self) -> None:

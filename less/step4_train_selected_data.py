@@ -582,8 +582,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                             run.log_param(f"{directory}.{k}", v)
 
                 # Log config
-                recipe_location = sys.argv[sys.argv.index("--config") + 1]
-                run.log_artifact(recipe_location, "config")
+                # recipe_location = sys.argv[sys.argv.index("--config") + 1]
+                # run.log_artifact(recipe_location, "config")
                 log_config(run, cfg, "config")   
 
                 for curr_epoch in range(self.epochs_run, self.total_epochs):

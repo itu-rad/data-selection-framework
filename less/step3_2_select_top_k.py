@@ -30,6 +30,7 @@ None, but creates top-k data files for each target task.
 import json
 import os
 import mlflow
+import radt
 import torch
 import sys
 from torchtune import config
@@ -275,11 +276,13 @@ def select_top_k(cfg:DictConfig="./less/config/llama3_2/step3_2_select_top_k.yam
     """
     cfg = OmegaConf.load(cfg)
  
-    # Loop over each target task name
-    for target_task_name in cfg.target_task_names:
-        score_paths, num_samples, top_k = setup(cfg,target_task_name)
-        sorted_file_specific_index, sorted_data_from = sort_scores(cfg, score_paths, num_samples, target_task_name)
-        select_and_write_samples(cfg, sorted_file_specific_index, sorted_data_from, num_samples, top_k, target_task_name)
+    with radt.run.RADTBenchmark() as run:
+
+        # Loop over each target task name
+        for target_task_name in cfg.target_task_names:
+            score_paths, num_samples, top_k = setup(cfg,target_task_name)
+            sorted_file_specific_index, sorted_data_from = sort_scores(cfg, score_paths, num_samples, target_task_name)
+            select_and_write_samples(cfg, sorted_file_specific_index, sorted_data_from, num_samples, top_k, target_task_name)
 
 
 if __name__ == "__main__":

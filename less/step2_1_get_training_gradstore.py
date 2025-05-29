@@ -22,6 +22,7 @@ import sys
 import os
 
 import mlflow
+import radt
 # Add the parent directory to sys.path so Python can find 'selection'
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -733,11 +734,10 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                             sample_count += 1
                             print(f"\n--- Sample {sample_count} from dataloader decoded ---")
                             print(decoded)
-                            
+            
             for batch in tqdm(self._dataloader, total=len(self._dataloader)):
                 self.prepare_batch(batch)
                 count += 1
-
                 if count <= max_index:
                     if count == max_index:
                         print("skipped to count", count)
@@ -746,46 +746,36 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                 if cfg.gradient_type == "adam":
                     if count == 1:
                         print("Using Adam gradients")
-
                     vectorized_grads = self.obtain_gradients_with_adam(self._model, batch, m, v)
-                    
                 elif cfg.gradient_type == "sign":
                     if count == 1:
                         print("Using Sign gradients")
                     vectorized_grads = self.obtain_sign_gradients(self._model, batch)
-                    
                 elif cfg.gradient_type == 'SGD':
                     if count == 1:
                         print("Using SGD gradients")
                     vectorized_grads = self.obtain_gradients(self._model, batch)
-
                 # add the gradients to the full_grads
                 full_grads.append(vectorized_grads)
                 self._model.zero_grad()
-
                 if count % project_interval == 0:
                     _project(full_grads, projected_grads)
                     full_grads = []
-
                 if count % save_interval == 0:
                     _save(projected_grads, output_dirs)
-
                 if cfg.max_samples is not None and count == cfg.max_samples:
                     break
                 
             if len(full_grads) > 0:
                 _project(full_grads, projected_grads)
                 full_grads = []
-
             for dim in proj_dim:
                 _save(projected_grads, output_dirs)
-
             torch.cuda.empty_cache()
             for dim in proj_dim:
                 output_dir = output_dirs[dim]
                 self.merge_and_normalize_info(output_dir, prefix="grads")
                 self.merge_info(output_dir, prefix="grads")
-
             print("Finished")
 
 
@@ -929,14 +919,15 @@ def get_training_gradstore(cfg: DictConfig = "less/config/llama3_2/step2_1_get_t
     cfg = set_dataset_output_dir(cfg)
      
     cfgs = multiple_checkpoints(cfg) if cfg.checkpoints is not None else [cfg]
-    
-    for cfg in cfgs:
-        cfg = set_checkpoint_paths(cfg)
-        config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
-        recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
-        recipe.setup(cfg=cfg)
-        recipe.collect_grads(cfg=cfg)
-        recipe.cleanup()
+
+    with radt.run.RADTBenchmark() as run:
+        for cfg in cfgs:
+            cfg = set_checkpoint_paths(cfg)
+            config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
+            recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
+            recipe.setup(cfg=cfg)
+            recipe.collect_grads(cfg=cfg)
+            recipe.cleanup()
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ checkpointer:
   _component_: misc.checkpointer.radTFullModelHFCheckpointer
 # local dir, to find checkout
 # If you are using a ML-flow model define its local checkpoint dir here. 
-  checkpoint_dir: model_cache/finetuned_models/Llama-3.2-1B-Instruct/FullSampler_2/epoch_3
+  checkpoint_dir: model_cache/less/finetuned_models/saved/llama3_2_1B_instruct/top_p1/epoch_0
   checkpoint_files: [
     ft-model-00001-of-00001.safetensors
   ] 

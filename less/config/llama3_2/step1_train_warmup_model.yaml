@@ -1,4 +1,4 @@
-model_name: llama3_2_1B_instruct_warmup_steps_fixed
+model_name: llama3_2_1B_instruct
 output_dir: model_cache/less/warmup_models/${model_name}
 
 sampler:
@@ -40,7 +40,7 @@ seed: 42
 shuffle: True
 same_shuffle_every_epoch: True # LESS use the same selection (percentage) of data samples in every epoch. This ensures we use the same data samples (the same shuffle seed) every epoch with the percentageSampler. However LESS shuffle this selected percentage differently inside every epoch
 n_print_examples: 3
-batch_size: 32 # LESS default = 1
+batch_size: 8 # LESS default = 1
 
 # Optimizer and Scheduler
 optimizer:
@@ -50,7 +50,7 @@ optimizer:
   lr: 2e-05 # LESS default = 2e-05
 lr_scheduler:
   _component_: torchtune.training.lr_schedulers.get_cosine_schedule_with_warmup # LESS default use linear warmup, cosine decay
-  num_warmup_steps: 2 # LESS default use a warmup_ratio of 0.03, you will need to calculate the equivalent manually.
+  num_warmup_steps: 100 # LESS default use a warmup_ratio of 0.03, you will need to calculate the equivalent manually.
   # num_warmup_steps should be 0.03 * (n_selected_train_data_samples / batch_size * gradient_accumulation_steps)
 
 
@@ -60,7 +60,7 @@ loss:
 # Training
 epochs: 4 # LESS default = 4
 max_steps_per_epoch: null # LESS default = unknown
-gradient_accumulation_steps: 1  # Use to increase effective batch size # LESS default = 32
+gradient_accumulation_steps: 4  # Use to increase effective batch size # LESS default = 32
 clip_grad_norm: null
 compile: False  # torch.compile the model + loss, True increases speed + decreases memory
 

@@ -14,7 +14,7 @@
 #   tune run lora_finetune_single_device --config llama3_2/1B_lora_single_device checkpointer.checkpoint_dir=<YOUR_CHECKPOINT_DIR>
 #
 # This config works only for training on single device.
-model_name: llama3_2_1B_instruct_warmup_steps_fixed
+model_name: llama3_2_1B_instruct
 output_dir: ./less/gradstore/${model_name}/training_grads
 
 checkpoints: [0,1,2,3] # A list of which epochs to be used (epochs start from 0)
@@ -77,7 +77,7 @@ loss:
 # Training
 epochs: 4 # LESS default = 4
 max_steps_per_epoch: null # LESS default = unknown
-gradient_accumulation_steps: 32  # Use to increase effective batch size # LESS default = 32
+gradient_accumulation_steps: 4  # Use to increase effective batch size # LESS default = 32
 clip_grad_norm: null
 compile: False  # torch.compile the model + loss, True increases speed + decreases memory
 

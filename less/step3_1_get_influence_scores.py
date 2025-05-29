@@ -23,6 +23,7 @@ import csv
 
 import mlflow
 from omegaconf import DictConfig, OmegaConf
+import radt
 import torch
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -104,6 +105,9 @@ def compute_influence_scores(cfg):
                 influence_scores += cfg.checkpoint_avg_lr[i] * calculate_influence_score(
                 training_info=training_info, validation_info=validation_info)
                 
+            print(f"Shape of training gradients: {training_info.shape}")
+            print(f"Shape of validation gradients: {validation_info.shape}")
+            
             # Shape of influence scores will be n_samples x n_subtasks
             print(f"Shape of influence_scores:{influence_scores.shape}")   
              
@@ -159,12 +163,15 @@ def get_avg_lr_csv(cfg):
     # return changed cfg
     
     return cfg 
+
 def get_influence_scores(cfg: DictConfig = "less/config/llama3_2/step3_1_get_influence_scores.yaml"):
     
     cfg = OmegaConf.load(cfg)
     changed_config1 = get_avg_lr_csv(cfg)
     changed_config2 =  renormalize_avg_lr(changed_config1)
-    compute_influence_scores(changed_config2)
+        
+    with radt.run.RADTBenchmark() as run:
+        compute_influence_scores(changed_config2)
     
  
 if __name__ == "__main__":

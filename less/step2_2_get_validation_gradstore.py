@@ -23,6 +23,7 @@ import sys
 import os
 
 import mlflow
+import radt
 # Add the parent directory to sys.path so Python can find 'selection'
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -994,13 +995,14 @@ def get_validation_gradstore(cfg: DictConfig = "less/config/llama3_2/step2_2_get
      
     cfgs = multiple_checkpoints(cfg) if cfg.checkpoints is not None else [cfg]
     
-    for cfg in cfgs:
-        cfg = set_checkpoint_paths(cfg)
-        config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
-        recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
-        recipe.setup(cfg=cfg)
-        recipe.collect_grads(cfg=cfg)
-        recipe.cleanup()
+    with radt.run.RADTBenchmark() as run:
+        for cfg in cfgs:
+            cfg = set_checkpoint_paths(cfg)
+            config.log_config(recipe_name="LoRAFinetuneRecipeSingleDevice", cfg=cfg)
+            recipe = LoRAFinetuneRecipeSingleDevice(cfg=cfg)
+            recipe.setup(cfg=cfg)
+            recipe.collect_grads(cfg=cfg)
+            recipe.cleanup()
 
 
 if __name__ == "__main__":
