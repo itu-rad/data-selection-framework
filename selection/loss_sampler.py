@@ -1,6 +1,6 @@
 import copy
 import torch
-from selection.selectivesampler import SelectiveSampler
+from selection.selectivesampler import SelectiveSampler, Phase
 
 
 class LossSampler(SelectiveSampler):
@@ -42,6 +42,7 @@ class LossSampler(SelectiveSampler):
         self.mask = None  # Boolean tensor of size len(dataset)
         self.no_grad_scoring = True
         self.has_scoring_phase = True
+        self.phase = Phase.UNINITIALIZED
 
     def pre_epoch(self) -> None:
         pass

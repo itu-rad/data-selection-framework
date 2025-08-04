@@ -9,8 +9,9 @@ from enum import Enum
 
 class Phase(Enum):
     ONLY_TRAINING_SUPPORT = 0
-    SCORING = 1
-    TRAINING = 2
+    UNINITIALIZED = 1
+    SCORING = 2
+    TRAINING = 3
 
 
 class SelectiveSampler(DistributedSampler, ABC):
@@ -53,7 +54,6 @@ class SelectiveSampler(DistributedSampler, ABC):
         self.batch_size = batch_size
         self.no_grad_scoring = False
 
-        self.has_scoring_phase = False
         self.phase = Phase.ONLY_TRAINING_SUPPORT
         self.sampling_indices = None
         self.sampling_ratio = sampling_ratio
@@ -76,7 +76,7 @@ class SelectiveSampler(DistributedSampler, ABC):
         # Keep in mind that the RNG comes from the data loader shuffling indices, not the mask itself
         # This means that the mask is applied after the shuffling
         # Keeping the same mask between epochs does not guarantee same data elements
-        if self.is_sampling:
+        if self.phase == Phase.SCORING:
             return iter(self.sampling_indices[self.sampling_start : self.sampling_end])
 
         indices = self.get_iterator()
@@ -92,7 +92,7 @@ class SelectiveSampler(DistributedSampler, ABC):
         return iter(indices)
 
     def __len__(self) -> int:
-        if self.is_sampling:
+        if self.phase == Phase.SCORING:
             return self.sampling_end - self.sampling_start
 
         if self.mask is not None:
@@ -108,7 +108,7 @@ class SelectiveSampler(DistributedSampler, ABC):
         n = len(self.dataset)
         mask = [True] * n
 
-        if self.phase != Phase.ONLY_TRAINING_SUPPORT:
+        if self.phase == Phase.ONLY_TRAINING_SUPPORT:
             raise RuntimeError("Sampler does not support scoring phase")
 
         self.phase = Phase.SCORING
