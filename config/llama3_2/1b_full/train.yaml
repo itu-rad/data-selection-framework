@@ -22,7 +22,7 @@
 output_dir: model_cache/finetuned_models/torchtune/llama3_2_1B/full_single_device # Change it to your preference.
 
 sampler:
-  _component_: selection.LossSampler
+  _component_: selection.HalfSampler
   sampling_ratio: 0.1
   num_passes: 10
 

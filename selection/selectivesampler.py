@@ -108,7 +108,7 @@ class SelectiveSampler(DistributedSampler, ABC):
         n = len(self.dataset)
         mask = [True] * n
 
-        if self.phase == Phase.ONLY_TRAINING_SUPPORT:
+        if not self.has_scoring_phase:
             raise RuntimeError("Sampler does not support scoring phase")
 
         self.phase = Phase.SCORING
@@ -120,7 +120,7 @@ class SelectiveSampler(DistributedSampler, ABC):
 
     def _prepare_training_phase(self):
         # Disable sampling mode
-        if self.phase != Phase.ONLY_TRAINING_SUPPORT:
+        if self.has_scoring_phase:
             self.phase = Phase.TRAINING
 
     def score(self, recipe, idx, batch):  # requires implementation of inform_logits
@@ -136,6 +136,11 @@ class SelectiveSampler(DistributedSampler, ABC):
     def get_iterator(self):
         """Get the iterator for the dataset. This is used to get the indices for the sampler."""
         return super().__iter__()
+
+    @property
+    def has_scoring_phase(self) -> bool:
+        """Indicates whether the sampler supports scoring phase."""
+        return self.phase != Phase.ONLY_TRAINING_SUPPORT
 
     @abstractmethod
     def pre_epoch(self) -> None:
